@@ -1,0 +1,22 @@
+{
+    "name": "DingoJsonUI",
+    "rootNamespace": "DingoJsonUI",
+    "references": [
+        "Newtonsoft.Json"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.nuget.newtonsoft-json",
+            "expression": "0.0.0",
+            "define": "NEWTONSOFT_EXISTS"
+        }
+    ],
+    "noEngineReferences": false
+}

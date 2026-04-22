@@ -1,0 +1,30 @@
+{
+    "name": "DingoJsonUI.Tests",
+    "rootNamespace": "DingoJsonUI.Tests",
+    "references": [
+        "DingoJsonUI",
+        "Newtonsoft.Json"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll",
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.nuget.newtonsoft-json",
+            "expression": "0.0.0",
+            "define": "NEWTONSOFT_EXISTS"
+        }
+    ],
+    "noEngineReferences": false
+}
