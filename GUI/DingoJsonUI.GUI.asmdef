@@ -1,6 +1,6 @@
 {
-    "name": "DingoJsonUI.UImGui",
-    "rootNamespace": "DingoJsonUI.UImGui",
+    "name": "DingoJsonUI.GUI",
+    "rootNamespace": "DingoJsonUI.GUI",
     "references": [
         "DingoJsonUI",
         "UImGui"

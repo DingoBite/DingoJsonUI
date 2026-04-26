@@ -13,10 +13,12 @@
 
 - `Runtime/`
   Ядро: модель документа, JSONPath normalizer/matcher и подписки.
-- `UImGui/`
+- `GUI/`
   Dear ImGui renderer и готовый `MonoBehaviour`.
 - `Tests/Editor/`
   Edit-mode тесты на matching путей и доставку изменений.
+- `Examples/`
+  Sample-сцена с JSON-редактором, inline/toolbar кнопками, подписками и `JsonSerializedObject<T>` inspector.
 
 ## Зависимости
 
@@ -28,7 +30,7 @@
 ## Быстрый старт
 
 1. Убедитесь, что на камере в сцене есть компонент `UImGui.UImGui`.
-2. Повесьте `DingoJsonUI.UImGui.UImGuiJsonEditorBehaviour` на любой `GameObject`.
+2. Повесьте `DingoJsonUI.GUI.UImGuiJsonEditorBehaviour` на любой `GameObject`.
 3. Назначьте `TextAsset` с JSON или оставьте встроенный JSON-текст.
 4. Запустите Play mode.
 
@@ -66,9 +68,62 @@ document.Subscribe("$.player.*", change =>
 - `JArray` как список индексов;
 - `bool` как checkbox;
 - числа и строки как editable input;
-- `null` как readonly placeholder.
+- `null` как readonly placeholder;
+- зарегистрированные `JsonUiAction` как toolbar или inline кнопки.
 
-Сейчас scope намеренно узкий: модуль хорошо редактирует существующие значения и умеет создавать недостающие object/array пути через `SetValue(...)`, но пока без schema-driven dropdowns, enum hints, add/remove кнопок и отдельного validation layer.
+Кнопки привязываются кодом к JSONPath:
+
+```csharp
+var editor = new UImGuiJsonEditor(document);
+
+editor.Actions.AddButton("$.player.hp", "Heal", context =>
+{
+    context.Document.SetValue(context.Path, new JValue(100));
+});
+
+editor.Actions.AddButton(JsonPath.Root, "Reset", context =>
+{
+    context.Document.LoadJson(@"{""player"":{""hp"":100,""alive"":true}}");
+}, JsonUiActionPlacement.Toolbar);
+```
+
+`JsonSerializedObject<T>` это wrapper над `[Serializable]` объектом с UnityInspector-подобным Newtonsoft resolver'ом. Он сериализует public-поля, private `[SerializeField]` поля и `[JsonProperty]` members в `JsonDocumentModel`; UImGui inspector редактирует эти JSON properties и может применить их обратно в target object.
+
+```csharp
+[Serializable]
+public sealed class PlayerConfig
+{
+    public int Health = 100;
+
+    [SerializeField]
+    [JsonProperty("displayName")]
+    private string _displayName = "Dingo";
+}
+
+var jsonObject = new JsonSerializedObject<PlayerConfig>(config);
+var inspector = new UImGuiJsonSerializedObjectInspector<PlayerConfig>(jsonObject, "Player Config");
+inspector.Draw();
+```
+
+Для быстрых UI-прототипов или типов, которым нужна своя конвертация, `JsonSerializedObject<T>` можно создать с делегатами вместо default resolver'а:
+
+```csharp
+var jsonObject = new JsonSerializedObject<MenuState>(
+    state,
+    (target, serializer) => new JObject
+    {
+        ["selectedTab"] = target.SelectedTab,
+        ["volume"] = target.Volume,
+    },
+    (json, target, serializer) =>
+    {
+        target.SelectedTab = json.Value<string>("selectedTab");
+        target.Volume = json.Value<float>("volume");
+        return target;
+    });
+```
+
+Сейчас scope всё ещё намеренно узкий: пока без schema-driven dropdowns, enum hints, add/remove редактирования коллекций и отдельного validation layer.
 
 ## Поведение шины изменений
 

@@ -3,7 +3,7 @@ using System;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 
-namespace DingoJsonUI.UImGui
+namespace DingoJsonUI.GUI
 {
     public sealed class UImGuiJsonEditorBehaviour : MonoBehaviour
     {
@@ -20,11 +20,32 @@ namespace DingoJsonUI.UImGui
         [SerializeField]
         private bool _reloadSourceOnEnable = true;
 
+        [SerializeField]
+        [Min(0f)]
+        private float _scrollWheelPixelsPerStep = 280f;
+
         private JsonDocumentModel _document;
         private UImGuiJsonEditor _editor;
         private bool _isQuitting;
 
         public JsonDocumentModel Document => _document;
+        public UImGuiJsonEditor Editor
+        {
+            get
+            {
+                EnsureEditorCreated();
+                return _editor;
+            }
+        }
+
+        public JsonUiActionCollection Actions
+        {
+            get
+            {
+                EnsureEditorCreated();
+                return _editor.Actions;
+            }
+        }
 
         private void Awake()
         {
@@ -38,12 +59,12 @@ namespace DingoJsonUI.UImGui
             if (_reloadSourceOnEnable)
                 ReloadSerializedSource();
 
-            global::UImGui.UImGuiUtility.Layout += OnLayout;
+            UImGui.UImGuiUtility.Layout += OnLayout;
         }
 
         private void OnDisable()
         {
-            global::UImGui.UImGuiUtility.Layout -= OnLayout;
+            UImGui.UImGuiUtility.Layout -= OnLayout;
         }
 
         private void OnApplicationQuit()
@@ -92,14 +113,21 @@ namespace DingoJsonUI.UImGui
             return _document.Subscribe(path, callback, fireImmediately);
         }
 
+        public JsonUiAction AddButton(string path, string label, Action<JsonUiActionContext> callback, JsonUiActionPlacement placement = JsonUiActionPlacement.Inline)
+        {
+            EnsureEditorCreated();
+            return _editor.Actions.AddButton(path, label, callback, placement);
+        }
+
         private void EnsureEditorCreated()
         {
             _document ??= new JsonDocumentModel();
             _editor ??= new UImGuiJsonEditor(_document, _windowTitle);
             _editor.WindowTitle = _windowTitle;
+            _editor.ScrollWheelPixelsPerStep = _scrollWheelPixelsPerStep;
         }
 
-        private void OnLayout(global::UImGui.UImGui uImGui)
+        private void OnLayout(UImGui.UImGui uImGui)
         {
             if (_isQuitting)
                 return;
