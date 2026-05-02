@@ -131,13 +131,92 @@ namespace DingoJsonUI.Examples.Scripts
                                           }
                                         }";
 
+        private const string FAST_UI_SCHEMA = @"{
+                                          ""title"": ""Dingo Fast UI"",
+                                          ""root"": {
+                                            ""type"": ""section"",
+                                            ""children"": [
+                                              {
+                                                ""type"": ""row"",
+                                                ""children"": [
+                                                  { ""type"": ""button"", ""label"": ""Reset"", ""action"": ""resetJson"", ""tooltip"": ""Reload sample state."" },
+                                                  { ""type"": ""button"", ""label"": ""Combat Preset"", ""action"": ""combatPreset"", ""tooltip"": ""Apply several gameplay changes."" },
+                                                  { ""type"": ""button"", ""label"": ""+ Debug"", ""action"": ""debugClick"" }
+                                                ]
+                                              },
+                                              { ""type"": ""separator"" },
+                                              {
+                                                ""type"": ""tabs"",
+                                                ""children"": [
+                                                  {
+                                                    ""label"": ""Player"",
+                                                    ""children"": [
+                                                      { ""type"": ""inputText"", ""label"": ""Name"", ""path"": ""$.player.profile.name"" },
+                                                      { ""type"": ""sliderInt"", ""label"": ""HP"", ""path"": ""$.player.stats.hp"", ""min"": 0, ""max"": 120 },
+                                                      { ""type"": ""sliderFloat"", ""label"": ""Speed"", ""path"": ""$.player.stats.speed"", ""min"": 0, ""max"": 15 },
+                                                      { ""type"": ""toggle"", ""label"": ""Alive"", ""path"": ""$.player.stats.alive"" },
+                                                      {
+                                                        ""type"": ""row"",
+                                                        ""children"": [
+                                                          { ""type"": ""button"", ""label"": ""Heal"", ""action"": ""healPlayer"" },
+                                                          { ""type"": ""button"", ""label"": ""Damage"", ""action"": ""damagePlayer"", ""payload"": { ""amount"": 25 }, ""enabledWhen"": { ""path"": ""$.player.stats.hp"", ""gt"": 0 } },
+                                                          { ""type"": ""button"", ""label"": ""Complete Quest"", ""action"": ""completeQuest"", ""enabledWhen"": { ""path"": ""$.quests[0].complete"", ""equals"": false } }
+                                                        ]
+                                                      }
+                                                    ]
+                                                  },
+                                                  {
+                                                    ""label"": ""Inventory"",
+                                                    ""children"": [
+                                                      { ""type"": ""field"", ""label"": ""Potion"", ""path"": ""$.inventory[0].label"" },
+                                                      { ""type"": ""int"", ""label"": ""Potion Count"", ""path"": ""$.inventory[0].count"" },
+                                                      { ""type"": ""toggle"", ""label"": ""Key Equipped"", ""path"": ""$.inventory[1].equipped"" },
+                                                      { ""type"": ""button"", ""label"": ""Add Item"", ""action"": ""addItem"" }
+                                                    ]
+                                                  },
+                                                  {
+                                                    ""label"": ""Settings"",
+                                                    ""children"": [
+                                                      {
+                                                        ""type"": ""select"",
+                                                        ""label"": ""Difficulty"",
+                                                        ""path"": ""$.settings.difficulty"",
+                                                        ""options"": [
+                                                          { ""label"": ""Easy"", ""value"": ""Easy"" },
+                                                          { ""label"": ""Normal"", ""value"": ""Normal"" },
+                                                          { ""label"": ""Hard"", ""value"": ""Hard"" }
+                                                        ]
+                                                      },
+                                                      { ""type"": ""sliderFloat"", ""label"": ""Music"", ""path"": ""$.settings.musicVolume"", ""min"": 0, ""max"": 1 },
+                                                      { ""type"": ""toggle"", ""label"": ""Show Hints"", ""path"": ""$.settings.showHints"" },
+                                                      { ""type"": ""inputText"", ""label"": ""Note"", ""path"": ""$.settings.nullableNote"" }
+                                                    ]
+                                                  },
+                                                  {
+                                                    ""label"": ""Debug"",
+                                                    ""children"": [
+                                                      { ""type"": ""field"", ""label"": ""Clicks"", ""path"": ""$.debug.clicks"" },
+                                                      { ""type"": ""text"", ""label"": ""Last HP"", ""path"": ""$.debug.lastExactHpChange"" },
+                                                      { ""type"": ""text"", ""label"": ""Player Wildcard"", ""path"": ""$.debug.lastPlayerWildcard"" },
+                                                      { ""type"": ""text"", ""label"": ""Inventory Wildcard"", ""path"": ""$.debug.lastInventoryWildcard"" }
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        }";
+
         [SerializeField] private UImGuiJsonEditorBehaviour _jsonEditor;
+        [SerializeField] private bool _drawFastUi = true;
         [SerializeField] private bool _drawSerializedObjectInspector = true;
         [SerializeField] private bool _drawSerializedObjectMirror = true;
         [SerializeField] private bool _autoApplySerializedObject = true;
         [SerializeField] private PlayerConfig _playerConfig = new();
 
         private readonly List<JsonPathSubscription> _subscriptions = new();
+        private JsonUiCommandRegistry _fastUiCommands;
+        private UImGuiJsonScreen _fastUiScreen;
         private UImGuiJsonSerializedObjectInspector<PlayerConfig> _playerInspector;
         private bool _initialized;
         private bool _recordingDebugChange;
@@ -151,6 +230,8 @@ namespace DingoJsonUI.Examples.Scripts
         {
             UImGui.UImGuiUtility.Layout -= OnLayout;
             DisposeSubscriptions();
+            _fastUiScreen = null;
+            _fastUiCommands = null;
             _playerInspector?.Dispose();
             _playerInspector = null;
             _initialized = false;
@@ -167,6 +248,9 @@ namespace DingoJsonUI.Examples.Scripts
         private void OnLayout(UImGui.UImGui uImGui)
         {
             EnsureInitialized();
+
+            if (_drawFastUi && _fastUiScreen != null)
+                _fastUiScreen.Draw();
 
             if (_drawSerializedObjectInspector && _playerInspector != null)
             {
@@ -187,6 +271,7 @@ namespace DingoJsonUI.Examples.Scripts
             ReloadSampleJson();
             RegisterJsonButtons();
             RegisterSubscriptions();
+            RegisterFastUi();
 
             _playerInspector = new UImGuiJsonSerializedObjectInspector<PlayerConfig>(new JsonSerializedObject<PlayerConfig>(_playerConfig), "Dingo Serialized Object");
             _playerInspector.AutoApplyOnChange = _autoApplySerializedObject;
@@ -211,11 +296,7 @@ namespace DingoJsonUI.Examples.Scripts
             actions.AddButton(JsonPath.Root, "Reset JSON", _ => ReloadSampleJson(), JsonUiActionPlacement.Toolbar).Tooltip = "Reloads the sample JSON document.";
             actions.AddButton(JsonPath.Root, "Combat Preset", context =>
             {
-                context.Document.SetValue("$.player.stats.hp", new JValue(32));
-                context.Document.SetValue("$.player.stats.shield", new JValue(4.5));
-                context.Document.SetValue("$.player.flags.poisoned", new JValue(true));
-                context.Document.SetValue("$.settings.difficulty", new JValue("Hard"));
-                context.Document.SetValue("$.debug.lastAppliedPreset", new JValue("combat"));
+                ApplyCombatPreset(context.Document);
             }, JsonUiActionPlacement.Toolbar).Tooltip = "Updates several nested values and triggers subscriptions.";
 
             actions.AddButton("$.player.profile.name", "Rename", context =>
@@ -227,14 +308,12 @@ namespace DingoJsonUI.Examples.Scripts
 
             actions.AddButton("$.player.stats.hp", "Heal", context =>
             {
-                var maxHp = context.Document.GetValue("$.player.stats.maxHp", 100);
-                context.Document.SetValue(context.Path, new JValue(maxHp));
+                HealPlayer(context.Document);
             }).Tooltip = "Sets player hp to maxHp.";
 
             var damageButton = actions.AddButton("$.player.stats.hp", "-25", context =>
             {
-                var current = context.Document.GetValue(context.Path, 0);
-                context.Document.SetValue(context.Path, new JValue(Math.Max(0, current - 25)));
+                DamagePlayer(context.Document, 25);
             });
             damageButton.Tooltip = "Subtracts 25 hp while hp is above zero.";
             damageButton.IsEnabled = context => context.Token?.Value<int>() > 0;
@@ -249,19 +328,7 @@ namespace DingoJsonUI.Examples.Scripts
 
             actions.AddButton("$.inventory", "Add Item", context =>
             {
-                if (context.Token is not JArray inventory)
-                    return;
-
-                var index = inventory.Count;
-                var item = new JObject
-                {
-                    ["id"] = $"item-{index + 1}",
-                    ["label"] = $"Generated Item {index + 1}",
-                    ["count"] = 1,
-                    ["equipped"] = false,
-                };
-
-                context.Document.SetValue(JsonPath.BuildIndexPath(context.Path, index), item);
+                AddGeneratedInventoryItem(context.Document);
             }).Tooltip = "Appends an object to the inventory array.";
 
             var usePotionButton = actions.AddButton("$.inventory[0].count", "Use", context =>
@@ -274,8 +341,7 @@ namespace DingoJsonUI.Examples.Scripts
 
             actions.AddButton("$.quests[0].progress", "Complete", context =>
             {
-                context.Document.SetValue(context.Path, new JValue(1.0));
-                context.Document.SetValue("$.quests[0].complete", new JValue(true));
+                CompleteFirstQuest(context.Document);
             }).Tooltip = "Sets quest progress and completion fields.";
 
             actions.AddButton("$.settings.nullableNote", "Set Note", context =>
@@ -292,9 +358,22 @@ namespace DingoJsonUI.Examples.Scripts
 
             actions.AddButton("$.debug.clicks", "+1", context =>
             {
-                var current = context.Document.GetValue(context.Path, 0);
-                context.Document.SetValue(context.Path, new JValue(current + 1));
+                IncrementDebugClicks(context.Document);
             }).Tooltip = "Increments debug.clicks.";
+        }
+
+        private void RegisterFastUi()
+        {
+            _fastUiCommands = new JsonUiCommandRegistry();
+            _fastUiCommands.Register("resetJson", _ => ReloadSampleJson());
+            _fastUiCommands.Register("combatPreset", context => ApplyCombatPreset(context.Document));
+            _fastUiCommands.Register("healPlayer", context => HealPlayer(context.Document));
+            _fastUiCommands.Register("damagePlayer", context => DamagePlayer(context.Document, context.Payload?["amount"]?.Value<int>() ?? 25));
+            _fastUiCommands.Register("completeQuest", context => CompleteFirstQuest(context.Document));
+            _fastUiCommands.Register("addItem", context => AddGeneratedInventoryItem(context.Document));
+            _fastUiCommands.Register("debugClick", context => IncrementDebugClicks(context.Document));
+
+            _fastUiScreen = new UImGuiJsonScreen(_jsonEditor.Document, JsonUiSchema.FromJson(FAST_UI_SCHEMA), _fastUiCommands, "Dingo Fast UI");
         }
 
         private void RegisterSerializedObjectButtons()
@@ -369,6 +448,56 @@ namespace DingoJsonUI.Examples.Scripts
             {
                 _recordingDebugChange = false;
             }
+        }
+
+        private static void ApplyCombatPreset(JsonDocumentModel document)
+        {
+            document.SetValue("$.player.stats.hp", new JValue(32));
+            document.SetValue("$.player.stats.shield", new JValue(4.5));
+            document.SetValue("$.player.flags.poisoned", new JValue(true));
+            document.SetValue("$.settings.difficulty", new JValue("Hard"));
+            document.SetValue("$.debug.lastAppliedPreset", new JValue("combat"));
+        }
+
+        private static void HealPlayer(JsonDocumentModel document)
+        {
+            var maxHp = document.GetValue("$.player.stats.maxHp", 100);
+            document.SetValue("$.player.stats.hp", new JValue(maxHp));
+        }
+
+        private static void DamagePlayer(JsonDocumentModel document, int amount)
+        {
+            var current = document.GetValue("$.player.stats.hp", 0);
+            document.SetValue("$.player.stats.hp", new JValue(Math.Max(0, current - amount)));
+        }
+
+        private static void CompleteFirstQuest(JsonDocumentModel document)
+        {
+            document.SetValue("$.quests[0].progress", new JValue(1.0));
+            document.SetValue("$.quests[0].complete", new JValue(true));
+        }
+
+        private static void AddGeneratedInventoryItem(JsonDocumentModel document)
+        {
+            if (document.GetToken("$.inventory") is not JArray inventory)
+                return;
+
+            var index = inventory.Count;
+            var item = new JObject
+            {
+                ["id"] = $"item-{index + 1}",
+                ["label"] = $"Generated Item {index + 1}",
+                ["count"] = 1,
+                ["equipped"] = false,
+            };
+
+            document.SetValue(JsonPath.BuildIndexPath("$.inventory", index), item);
+        }
+
+        private static void IncrementDebugClicks(JsonDocumentModel document)
+        {
+            var current = document.GetValue("$.debug.clicks", 0);
+            document.SetValue("$.debug.clicks", new JValue(current + 1));
         }
 
         private void DrawSerializedObjectMirror()

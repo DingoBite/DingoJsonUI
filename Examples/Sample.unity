@@ -150,6 +150,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DingoJsonUISampleScene
   _jsonEditor: {fileID: 230387534}
+  _drawFastUi: 1
   _drawSerializedObjectInspector: 1
   _drawSerializedObjectMirror: 1
   _autoApplySerializedObject: 1

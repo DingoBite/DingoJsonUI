@@ -71,6 +71,38 @@ document.Subscribe("$.player.*", change =>
 - `null` as a readonly placeholder
 - registered `JsonUiAction` entries as toolbar or inline buttons
 
+For faster menu prototyping, `UImGuiJsonScreen` renders a lightweight UI schema over the same `JsonDocumentModel`. The schema describes layout and widgets; C# registers command callbacks by id:
+
+```csharp
+var schema = JsonUiSchema.FromJson(@"{
+  ""title"": ""Settings"",
+  ""root"": {
+    ""type"": ""section"",
+    ""children"": [
+      { ""type"": ""sliderFloat"", ""label"": ""Volume"", ""path"": ""$.audio.volume"", ""min"": 0, ""max"": 1 },
+      { ""type"": ""toggle"", ""label"": ""Debug"", ""path"": ""$.debug.enabled"" },
+      {
+        ""type"": ""button"",
+        ""label"": ""Apply"",
+        ""action"": ""applySettings"",
+        ""payload"": { ""source"": ""settings"" },
+        ""enabledWhen"": { ""path"": ""$.debug.enabled"", ""equals"": true }
+      }
+    ]
+  }
+}");
+
+var commands = new JsonUiCommandRegistry();
+commands.Register("applySettings", context => ApplySettings(context.Document, context.Payload));
+
+var diagnostics = new JsonUiSchemaValidator().Validate(schema, commands);
+
+var screen = new UImGuiJsonScreen(document, schema, commands);
+screen.Draw();
+```
+
+`visibleWhen` and `enabledWhen` accept either a path string (`"$.isVisible"`) or an object condition with `equals`, `notEquals`, `exists`, `truthy`, `gt`, `gte`, `lt`, and `lte`.
+
 Buttons are code-bound to JSON paths:
 
 ```csharp

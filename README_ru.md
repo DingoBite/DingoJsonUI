@@ -71,6 +71,38 @@ document.Subscribe("$.player.*", change =>
 - `null` как readonly placeholder;
 - зарегистрированные `JsonUiAction` как toolbar или inline кнопки.
 
+Для быстрой вёрстки меню есть `UImGuiJsonScreen`: он рисует lightweight UI schema поверх того же `JsonDocumentModel`. Schema описывает layout и widgets, а C# регистрирует callbacks по action id:
+
+```csharp
+var schema = JsonUiSchema.FromJson(@"{
+  ""title"": ""Settings"",
+  ""root"": {
+    ""type"": ""section"",
+    ""children"": [
+      { ""type"": ""sliderFloat"", ""label"": ""Volume"", ""path"": ""$.audio.volume"", ""min"": 0, ""max"": 1 },
+      { ""type"": ""toggle"", ""label"": ""Debug"", ""path"": ""$.debug.enabled"" },
+      {
+        ""type"": ""button"",
+        ""label"": ""Apply"",
+        ""action"": ""applySettings"",
+        ""payload"": { ""source"": ""settings"" },
+        ""enabledWhen"": { ""path"": ""$.debug.enabled"", ""equals"": true }
+      }
+    ]
+  }
+}");
+
+var commands = new JsonUiCommandRegistry();
+commands.Register("applySettings", context => ApplySettings(context.Document, context.Payload));
+
+var diagnostics = new JsonUiSchemaValidator().Validate(schema, commands);
+
+var screen = new UImGuiJsonScreen(document, schema, commands);
+screen.Draw();
+```
+
+`visibleWhen` и `enabledWhen` принимают или строку-путь (`"$.isVisible"`), или объект condition с `equals`, `notEquals`, `exists`, `truthy`, `gt`, `gte`, `lt`, `lte`.
+
 Кнопки привязываются кодом к JSONPath:
 
 ```csharp
