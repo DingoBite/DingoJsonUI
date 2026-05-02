@@ -1,5 +1,6 @@
 #if NEWTONSOFT_EXISTS
 using System;
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -27,6 +28,17 @@ namespace DingoJsonUI.Tests
         private sealed class DelegateTarget
         {
             public int RawValue = 2;
+        }
+
+        private sealed class UnsupportedUnityAsset : ScriptableObject
+        {
+        }
+
+        [Serializable]
+        private sealed class UnsupportedUnityTarget
+        {
+            public UnsupportedUnityAsset Asset;
+            public List<UnsupportedUnityAsset> Assets = new();
         }
 
         [Test]
@@ -71,6 +83,40 @@ namespace DingoJsonUI.Tests
 
             Assert.That(target.RawValue, Is.EqualTo(7));
             Assert.That(serializedObject.Target, Is.SameAs(target));
+        }
+
+        [Test]
+        public void JsonSerializedObject_UsesFallbackForUnsupportedUnityFields()
+        {
+            var asset = ScriptableObject.CreateInstance<UnsupportedUnityAsset>();
+            try
+            {
+                var target = new UnsupportedUnityTarget
+                {
+                    Asset = asset,
+                    Assets = { asset },
+                };
+
+                var serializedObject = new JsonSerializedObject<UnsupportedUnityTarget>(target);
+
+                var assetFallback = serializedObject.Document.GetValue<string>("$.Asset");
+                var assetsFallback = serializedObject.Document.GetValue<string>("$.Assets");
+                Assert.That(assetFallback, Is.Not.Null, serializedObject.ToJson());
+                Assert.That(assetsFallback, Is.Not.Null, serializedObject.ToJson());
+                Assert.That(assetFallback.Contains("not supported field"), Is.True);
+                Assert.That(assetFallback.Contains(nameof(UnsupportedUnityAsset)), Is.True);
+                Assert.That(assetsFallback.Contains("not supported field"), Is.True);
+
+                serializedObject.Document.SetValue("$.Asset", new JValue("changed"));
+                serializedObject.ApplyDocumentToTarget();
+
+                Assert.That(target.Asset, Is.SameAs(asset));
+                Assert.That(target.Assets[0], Is.SameAs(asset));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(asset);
+            }
         }
 
         [Test]

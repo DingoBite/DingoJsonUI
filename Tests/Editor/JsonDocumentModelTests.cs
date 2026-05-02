@@ -62,6 +62,25 @@ namespace DingoJsonUI.Tests
             Assert.That(document.GetValue<bool>("$.settings.graphics.vsync"), Is.True);
             Assert.That(document.GetToken("$.settings.graphics"), Is.TypeOf<JObject>());
         }
+
+        [Test]
+        public void Version_IncrementsOnlyWhenDocumentChanges()
+        {
+            var document = new JsonDocumentModel(@"{""value"":1}");
+            var initialVersion = document.Version;
+
+            document.SetValue("$.value", new JValue(1));
+            Assert.That(document.Version, Is.EqualTo(initialVersion));
+
+            document.SetValue("$.value", new JValue(2));
+            Assert.That(document.Version, Is.EqualTo(initialVersion + 1));
+
+            document.LoadJson(@"{""value"":2}", notifyRoot: false);
+            Assert.That(document.Version, Is.EqualTo(initialVersion + 1));
+
+            document.LoadJson(@"{""value"":3}", notifyRoot: false);
+            Assert.That(document.Version, Is.EqualTo(initialVersion + 2));
+        }
     }
 }
 #endif

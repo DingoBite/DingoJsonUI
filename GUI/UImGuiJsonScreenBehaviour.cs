@@ -35,14 +35,27 @@ namespace DingoJsonUI.GUI
         private bool _showDiagnostics = true;
 
         [SerializeField]
+        private bool _showDiagnosticsWhenValid;
+
+        [SerializeField]
+        private bool _registerDefaultPayloadCommands = true;
+
+        [SerializeField]
         [Min(0f)]
         private float _scrollWheelPixelsPerStep = 280f;
 
-        private readonly List<JsonUiSchemaDiagnostic> _diagnostics = new();
-        private JsonDocumentModel _document;
-        private JsonUiSchema _schema;
-        private JsonUiCommandRegistry _commands;
+        [SerializeField]
+        private bool _applyInitialWindowPlacement;
+
+        [SerializeField]
+        private Vector2 _initialWindowPosition = new(60f, 60f);
+
+        [SerializeField]
+        private Vector2 _initialWindowSize = new(430f, 260f);
+
+        private JsonUiSession _session;
         private UImGuiJsonScreen _screen;
+        private UImGuiJsonSchemaDiagnosticsWindow _diagnosticsWindow;
         private bool _isQuitting;
 
         public JsonDocumentModel Document
@@ -50,7 +63,7 @@ namespace DingoJsonUI.GUI
             get
             {
                 EnsureCreated();
-                return _document;
+                return _session.Document;
             }
         }
 
@@ -59,7 +72,7 @@ namespace DingoJsonUI.GUI
             get
             {
                 EnsureCreated();
-                return _schema;
+                return _session.Schema;
             }
         }
 
@@ -68,11 +81,69 @@ namespace DingoJsonUI.GUI
             get
             {
                 EnsureCreated();
-                return _commands;
+                return _session.Commands;
             }
         }
 
-        public IReadOnlyList<JsonUiSchemaDiagnostic> Diagnostics => _diagnostics;
+        public JsonUiSession Session
+        {
+            get
+            {
+                EnsureCreated();
+                return _session;
+            }
+        }
+
+        public IReadOnlyList<JsonUiSchemaDiagnostic> Diagnostics => Session.Diagnostics;
+
+        public bool ShowDiagnostics
+        {
+            get => _showDiagnostics;
+            set => _showDiagnostics = value;
+        }
+
+        public bool ShowDiagnosticsWhenValid
+        {
+            get => _showDiagnosticsWhenValid;
+            set => _showDiagnosticsWhenValid = value;
+        }
+
+        public bool RegisterDefaultPayloadCommandsOnCreate
+        {
+            get => _registerDefaultPayloadCommands;
+            set => _registerDefaultPayloadCommands = value;
+        }
+
+        public string WindowTitle
+        {
+            get => _windowTitle;
+            set => _windowTitle = string.IsNullOrWhiteSpace(value) ? "Dingo Fast UI" : value;
+        }
+
+        public float ScrollWheelPixelsPerStep
+        {
+            get => _scrollWheelPixelsPerStep;
+            set => _scrollWheelPixelsPerStep = Math.Max(0f, value);
+        }
+
+        public bool ApplyInitialWindowPlacement
+        {
+            get => _applyInitialWindowPlacement;
+            set => _applyInitialWindowPlacement = value;
+        }
+
+        public Vector2 InitialWindowPosition
+        {
+            get => _initialWindowPosition;
+            set => _initialWindowPosition = value;
+        }
+
+        public Vector2 InitialWindowSize
+        {
+            get => _initialWindowSize;
+            set => _initialWindowSize = value;
+        }
+
         public UImGuiJsonScreen Screen
         {
             get
@@ -118,61 +189,59 @@ namespace DingoJsonUI.GUI
         public bool ReloadJson()
         {
             EnsureCreated();
+            return LoadJson(GetJsonSource());
+        }
 
-            try
-            {
-                _document.LoadJson(GetJsonSource());
-                return true;
-            }
-            catch (Exception e)
-            {
-                AddDiagnostic(JsonUiSchemaDiagnosticSeverity.Error, "$.json", $"JSON reload failed: {e.Message}");
-                return false;
-            }
+        public bool LoadJson(string json)
+        {
+            EnsureCreated();
+            return _session.LoadJson(json);
         }
 
         [ContextMenu("Reload Schema")]
         public bool ReloadSchema()
         {
             EnsureCreated();
+            return LoadSchemaJson(GetSchemaSource());
+        }
 
-            JsonUiSchema nextSchema;
-            try
-            {
-                nextSchema = JsonUiSchema.FromJson(GetSchemaSource());
-            }
-            catch (Exception e)
-            {
-                ReplaceDiagnostics(new[]
-                {
-                    new JsonUiSchemaDiagnostic(JsonUiSchemaDiagnosticSeverity.Error, "$.schema", $"Schema parse failed: {e.Message}"),
-                });
-                return false;
-            }
+        public bool LoadSchemaJson(string json)
+        {
+            EnsureCreated();
+            var previousSchema = _session.Schema;
+            var result = _session.LoadSchemaJson(json);
+            if (!ReferenceEquals(previousSchema, _session.Schema))
+                RebuildScreen();
 
-            var diagnostics = new JsonUiSchemaValidator().Validate(nextSchema, _commands);
-            ReplaceDiagnostics(diagnostics);
+            return result;
+        }
 
-            if (HasErrors(diagnostics))
-                return false;
+        public bool LoadSchema(JsonUiSchema schema)
+        {
+            EnsureCreated();
+            var result = _session.LoadSchema(schema);
+            if (schema != null)
+                RebuildScreen();
 
-            _schema = nextSchema;
-            RebuildScreen();
-            return true;
+            return result;
         }
 
         public JsonUiCommand RegisterCommand(string id, Action<JsonUiCommandContext> callback)
         {
             EnsureCreated();
-            var command = _commands.Register(id, callback);
-            ValidateCurrentSchema();
-            return command;
+            return _session.RegisterCommand(id, callback);
+        }
+
+        public void RegisterDefaultPayloadCommands(bool replaceExisting = true)
+        {
+            EnsureCreated();
+            _session.RegisterDefaultPayloadCommands(replaceExisting);
         }
 
         public void ValidateCurrentSchema()
         {
             EnsureCreated();
-            ReplaceDiagnostics(new JsonUiSchemaValidator().Validate(_schema, _commands));
+            _session.ValidateCurrentSchema();
         }
 
         private void OnLayout(UImGui.UImGui uImGui)
@@ -182,7 +251,15 @@ namespace DingoJsonUI.GUI
 
             EnsureCreated();
             _screen.WindowTitle = _windowTitle;
-            _screen.ScrollWheelPixelsPerStep = _scrollWheelPixelsPerStep;
+            SyncOptions();
+            UImGuiJsonUi.ApplyOptions(_screen, _session.Options);
+
+            if (_applyInitialWindowPlacement)
+            {
+                ImGui.SetNextWindowPos(ToImGuiVector(_initialWindowPosition), ImGuiCond.FirstUseEver);
+                ImGui.SetNextWindowSize(ToImGuiVector(_initialWindowSize), ImGuiCond.FirstUseEver);
+            }
+
             _screen.Draw();
 
             if (_showDiagnostics)
@@ -191,9 +268,12 @@ namespace DingoJsonUI.GUI
 
         private void EnsureCreated()
         {
-            _document ??= new JsonDocumentModel();
-            _commands ??= new JsonUiCommandRegistry();
-            _schema ??= JsonUiSchema.FromJson(DefaultSchema);
+            if (_session == null)
+            {
+                _session = JsonUi.Session(schemaJson: DefaultSchema, options: CreateOptions());
+            }
+
+            _diagnosticsWindow ??= new UImGuiJsonSchemaDiagnosticsWindow();
 
             if (_screen == null)
                 RebuildScreen();
@@ -201,10 +281,29 @@ namespace DingoJsonUI.GUI
 
         private void RebuildScreen()
         {
-            _screen = new UImGuiJsonScreen(_document, _schema, _commands, _windowTitle)
+            SyncOptions();
+            _screen = UImGuiJsonUi.Screen(_session, _windowTitle);
+        }
+
+        private JsonUiOptions CreateOptions()
+        {
+            return new JsonUiOptions
             {
+                WindowTitle = _windowTitle,
+                RegisterDefaultPayloadCommands = _registerDefaultPayloadCommands,
                 ScrollWheelPixelsPerStep = _scrollWheelPixelsPerStep,
             };
+        }
+
+        private void SyncOptions()
+        {
+            if (_session == null)
+                return;
+
+            _session.Options.WindowTitle = _windowTitle;
+            _session.Options.RegisterDefaultPayloadCommands = _registerDefaultPayloadCommands;
+            _session.Options.ScrollWheelPixelsPerStep = _scrollWheelPixelsPerStep;
+            _session.Options.Sanitize();
         }
 
         private string GetJsonSource()
@@ -219,62 +318,19 @@ namespace DingoJsonUI.GUI
 
         private void DrawDiagnosticsWindow()
         {
-            if (_diagnostics.Count == 0)
-                return;
-
-            if (!ImGui.Begin($"{_windowTitle} Diagnostics"))
-            {
-                ImGui.End();
-                return;
-            }
-
-            for (var i = 0; i < _diagnostics.Count; i++)
-            {
-                var diagnostic = _diagnostics[i];
-                ImGui.TextColored(GetColor(diagnostic.Severity), diagnostic.ToString());
-            }
-
-            ImGui.End();
+            _diagnosticsWindow.WindowTitle = $"{_windowTitle} Validator";
+            _diagnosticsWindow.Diagnostics = _session.Diagnostics;
+            _diagnosticsWindow.DrawWhenValid = _showDiagnosticsWhenValid;
+            _diagnosticsWindow.OnValidate = ValidateCurrentSchema;
+            _diagnosticsWindow.OnReloadAll = ReloadAll;
+            _diagnosticsWindow.Draw();
         }
 
-        private void ReplaceDiagnostics(IEnumerable<JsonUiSchemaDiagnostic> diagnostics)
+        private static System.Numerics.Vector2 ToImGuiVector(Vector2 value)
         {
-            _diagnostics.Clear();
-            if (diagnostics == null)
-                return;
-
-            foreach (var diagnostic in diagnostics)
-                _diagnostics.Add(diagnostic);
+            return new System.Numerics.Vector2(value.x, value.y);
         }
 
-        private void AddDiagnostic(JsonUiSchemaDiagnosticSeverity severity, string schemaPath, string message)
-        {
-            _diagnostics.Add(new JsonUiSchemaDiagnostic(severity, schemaPath, message));
-        }
-
-        private static bool HasErrors(IReadOnlyList<JsonUiSchemaDiagnostic> diagnostics)
-        {
-            if (diagnostics == null)
-                return false;
-
-            for (var i = 0; i < diagnostics.Count; i++)
-            {
-                if (diagnostics[i].Severity == JsonUiSchemaDiagnosticSeverity.Error)
-                    return true;
-            }
-
-            return false;
-        }
-
-        private static System.Numerics.Vector4 GetColor(JsonUiSchemaDiagnosticSeverity severity)
-        {
-            return severity switch
-            {
-                JsonUiSchemaDiagnosticSeverity.Error => new System.Numerics.Vector4(1f, 0.35f, 0.25f, 1f),
-                JsonUiSchemaDiagnosticSeverity.Warning => new System.Numerics.Vector4(1f, 0.75f, 0.25f, 1f),
-                _ => new System.Numerics.Vector4(0.65f, 0.8f, 1f, 1f),
-            };
-        }
     }
 }
 #endif

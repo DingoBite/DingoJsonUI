@@ -10,11 +10,15 @@ namespace DingoJsonUI.GUI
     public sealed class UImGuiJsonScreen
     {
         private const float DefaultScrollWheelPixelsPerStep = 280f;
-        private const float LabelColumnWidth = 150f;
+        private const float DefaultLabelColumnWidth = 150f;
+        private const float MinimumLabelColumnWidth = 72f;
         private const float MinimumFieldWidth = 80f;
 
         private readonly JsonDocumentModel _document;
         private readonly Dictionary<string, string> _textBuffers = new();
+        private readonly HashSet<string> _dirtyTextBuffers = new(StringComparer.Ordinal);
+        private readonly Stack<JsonUiLayoutScope> _layoutScopes = new();
+        private readonly HashSet<string> _templateStack = new(StringComparer.Ordinal);
 
         public JsonUiSchema Schema { get; set; }
         public JsonUiCommandRegistry Commands { get; }
@@ -50,67 +54,138 @@ namespace DingoJsonUI.GUI
             if (node.SameLine)
                 ImGui.SameLine();
 
-            ImGui.PushID(GetNodeId(node));
-            switch ((node.Type ?? JsonUiNodeType.Section).Trim())
+            if (JsonUiSchema.IsTemplateReference(node))
             {
-                case JsonUiNodeType.Row:
-                    DrawRow(node);
-                    break;
-                case JsonUiNodeType.Columns:
-                    DrawColumns(node);
-                    break;
-                case JsonUiNodeType.Tabs:
-                    DrawTabs(node);
-                    break;
-                case JsonUiNodeType.Foldout:
-                    DrawFoldout(node);
-                    break;
-                case JsonUiNodeType.Text:
-                    DrawText(node);
-                    break;
-                case JsonUiNodeType.Button:
-                    DrawButton(node);
-                    break;
-                case JsonUiNodeType.Toggle:
-                    DrawToggle(node);
-                    break;
-                case JsonUiNodeType.InputText:
-                    DrawStringField(node);
-                    break;
-                case JsonUiNodeType.Integer:
-                    DrawIntegerField(node);
-                    break;
-                case JsonUiNodeType.Float:
-                    DrawFloatField(node);
-                    break;
-                case JsonUiNodeType.SliderInt:
-                    DrawIntSlider(node);
-                    break;
-                case JsonUiNodeType.SliderFloat:
-                    DrawFloatSlider(node);
-                    break;
-                case JsonUiNodeType.Select:
-                    DrawSelect(node);
-                    break;
-                case JsonUiNodeType.Progress:
-                    DrawProgress(node);
-                    break;
-                case JsonUiNodeType.Separator:
-                    ImGui.Separator();
-                    break;
-                case JsonUiNodeType.Space:
-                    ImGui.Spacing();
-                    break;
-                case JsonUiNodeType.Field:
-                    DrawAutoField(node);
-                    break;
-                default:
-                    DrawSection(node);
-                    break;
+                DrawTemplateReference(node);
+                return;
             }
 
-            DrawTooltip(node);
-            ImGui.PopID();
+            ImGui.PushID(GetNodeId(node));
+            PushLayoutScope(node);
+            try
+            {
+                switch (NormalizeNodeType(node.Type))
+                {
+                    case JsonUiNodeType.Row:
+                        DrawRow(node);
+                        break;
+                    case JsonUiNodeType.Columns:
+                        DrawColumns(node);
+                        break;
+                    case JsonUiNodeType.Tabs:
+                        DrawTabs(node);
+                        break;
+                    case JsonUiNodeType.Foldout:
+                        DrawFoldout(node);
+                        break;
+                    case JsonUiNodeType.Text:
+                        DrawText(node);
+                        break;
+                    case JsonUiNodeType.Button:
+                        DrawButton(node);
+                        break;
+                    case JsonUiNodeType.Toggle:
+                        DrawToggle(node);
+                        break;
+                    case JsonUiNodeType.InputText:
+                        DrawStringField(node);
+                        break;
+                    case JsonUiNodeType.InputTextMultiline:
+                        DrawMultilineStringField(node);
+                        break;
+                    case JsonUiNodeType.Integer:
+                        DrawIntegerField(node);
+                        break;
+                    case JsonUiNodeType.Float:
+                        DrawFloatField(node);
+                        break;
+                    case JsonUiNodeType.DragInt:
+                        DrawDragInt(node);
+                        break;
+                    case JsonUiNodeType.DragFloat:
+                        DrawDragFloat(node);
+                        break;
+                    case JsonUiNodeType.SliderInt:
+                        DrawIntSlider(node);
+                        break;
+                    case JsonUiNodeType.SliderFloat:
+                        DrawFloatSlider(node);
+                        break;
+                    case JsonUiNodeType.Vector2:
+                        DrawVector2(node);
+                        break;
+                    case JsonUiNodeType.Vector3:
+                        DrawVector3(node);
+                        break;
+                    case JsonUiNodeType.Color:
+                        DrawColor(node);
+                        break;
+                    case JsonUiNodeType.Select:
+                        DrawSelect(node);
+                        break;
+                    case JsonUiNodeType.Radio:
+                        DrawRadio(node);
+                        break;
+                    case JsonUiNodeType.Progress:
+                        DrawProgress(node);
+                        break;
+                    case JsonUiNodeType.Separator:
+                        ImGui.Separator();
+                        break;
+                    case JsonUiNodeType.Space:
+                        ImGui.Spacing();
+                        break;
+                    case JsonUiNodeType.Field:
+                        DrawAutoField(node);
+                        break;
+                    default:
+                        DrawSection(node);
+                        break;
+                }
+
+                DrawTooltip(node);
+            }
+            finally
+            {
+                PopLayoutScope();
+                ImGui.PopID();
+            }
+        }
+
+        private void DrawTemplateReference(JsonUiNode node)
+        {
+            var templateName = JsonUiSchema.GetTemplateName(node);
+            if (string.IsNullOrWhiteSpace(templateName))
+            {
+                DrawTemplateError("missing template name");
+                return;
+            }
+
+            if (!_templateStack.Add(templateName))
+            {
+                DrawTemplateError($"recursive template: {templateName}");
+                return;
+            }
+
+            try
+            {
+                if (Schema == null || !Schema.TryCreateTemplateInstance(node, out var templateInstance))
+                {
+                    DrawTemplateError($"missing template: {templateName}");
+                    return;
+                }
+
+                DrawNode(templateInstance);
+            }
+            finally
+            {
+                _templateStack.Remove(templateName);
+            }
+        }
+
+        private static void DrawTemplateError(string message)
+        {
+            ImGui.TextDisabled($"[template {message}]");
         }
 
         private void DrawSection(JsonUiNode node)
@@ -139,10 +214,16 @@ namespace DingoJsonUI.GUI
         private void DrawRow(JsonUiNode node)
         {
             var children = node.SafeChildren;
+            var wrap = node.Wrap != false;
+            var spacing = CurrentLayout.Spacing ?? ImGui.GetStyle().ItemSpacing.X;
             for (var i = 0; i < children.Count; i++)
             {
                 if (i > 0)
-                    ImGui.SameLine();
+                {
+                    var nextWidth = EstimateNodeWidth(children[i]);
+                    if (!wrap || CanFitSameLine(nextWidth, spacing))
+                        ImGui.SameLine(0f, spacing);
+                }
 
                 DrawNode(children[i]);
             }
@@ -196,9 +277,10 @@ namespace DingoJsonUI.GUI
 
             if (!string.IsNullOrWhiteSpace(node.Label) && !string.IsNullOrWhiteSpace(node.Path))
             {
-                DrawLabel(node);
-                ImGui.SameLine(LabelColumnWidth);
+                var width = BeginValueField(node, MinimumFieldWidth, false);
+                ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + width);
                 ImGui.TextUnformatted(text ?? string.Empty);
+                ImGui.PopTextWrapPos();
                 return;
             }
 
@@ -216,7 +298,10 @@ namespace DingoJsonUI.GUI
             if (!enabled)
                 ImGui.PushStyleVar(ImGuiStyleVar.Alpha, ImGui.GetStyle().Alpha * 0.5f);
 
-            var clicked = ImGui.Button(node.Label ?? node.Action ?? "Button");
+            var size = GetButtonSize(node);
+            var clicked = size.X > 0f || size.Y > 0f
+                ? ImGui.Button(node.Label ?? node.Action ?? "Button", size)
+                : ImGui.Button(node.Label ?? node.Action ?? "Button");
 
             if (!enabled)
                 ImGui.PopStyleVar();
@@ -230,8 +315,7 @@ namespace DingoJsonUI.GUI
             if (!TryGetPath(node, out var path))
                 return;
 
-            DrawLabel(node);
-            ImGui.SameLine(LabelColumnWidth);
+            BeginValueField(node, MinimumFieldWidth, false);
             var value = _document.GetValue(path, false);
             if (!IsNodeEnabled(node))
                 ImGui.BeginDisabled();
@@ -248,9 +332,7 @@ namespace DingoJsonUI.GUI
             if (!TryGetPath(node, out var path))
                 return;
 
-            DrawLabel(node);
-            ImGui.SameLine(LabelColumnWidth);
-            SetNextItemWidth(node);
+            BeginValueField(node);
 
             var current = _document.GetValue<string>(path) ?? string.Empty;
             var buffer = GetBuffer(path, current);
@@ -260,14 +342,42 @@ namespace DingoJsonUI.GUI
 
             if (ImGui.InputText("##value", ref buffer, 2048))
             {
-                _textBuffers[path] = buffer;
+                StoreEditedBuffer(path, buffer);
                 _document.SetValue(path, new JValue(buffer));
+                current = buffer;
             }
+
+            UpdateTextBufferState(path, buffer, current);
 
             if (!IsNodeEnabled(node))
                 ImGui.EndDisabled();
+        }
 
-            _textBuffers[path] = buffer;
+        private void DrawMultilineStringField(JsonUiNode node)
+        {
+            if (!TryGetPath(node, out var path))
+                return;
+
+            var width = BeginValueField(node, MinimumFieldWidth, false);
+            var height = Math.Max(ImGui.GetTextLineHeightWithSpacing() * 3f, node.Height ?? ImGui.GetTextLineHeightWithSpacing() * 4f);
+
+            var current = _document.GetValue<string>(path) ?? string.Empty;
+            var buffer = GetBuffer(path, current);
+
+            if (!IsNodeEnabled(node))
+                ImGui.BeginDisabled();
+
+            if (ImGui.InputTextMultiline("##value", ref buffer, 8192, new System.Numerics.Vector2(width, height)))
+            {
+                StoreEditedBuffer(path, buffer);
+                _document.SetValue(path, new JValue(buffer));
+                current = buffer;
+            }
+
+            UpdateTextBufferState(path, buffer, current);
+
+            if (!IsNodeEnabled(node))
+                ImGui.EndDisabled();
         }
 
         private void DrawIntegerField(JsonUiNode node)
@@ -275,9 +385,7 @@ namespace DingoJsonUI.GUI
             if (!TryGetPath(node, out var path))
                 return;
 
-            DrawLabel(node);
-            ImGui.SameLine(LabelColumnWidth);
-            SetNextItemWidth(node);
+            BeginValueField(node);
 
             var current = _document.GetValue(path, 0).ToString(CultureInfo.InvariantCulture);
             var buffer = GetBuffer(path, current);
@@ -287,15 +395,18 @@ namespace DingoJsonUI.GUI
 
             if (ImGui.InputText("##value", ref buffer, 64))
             {
-                _textBuffers[path] = buffer;
+                StoreEditedBuffer(path, buffer);
                 if (int.TryParse(buffer, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+                {
                     _document.SetValue(path, new JValue(parsed));
+                    current = parsed.ToString(CultureInfo.InvariantCulture);
+                }
             }
+
+            UpdateTextBufferState(path, buffer, current);
 
             if (!IsNodeEnabled(node))
                 ImGui.EndDisabled();
-
-            _textBuffers[path] = buffer;
         }
 
         private void DrawFloatField(JsonUiNode node)
@@ -303,9 +414,7 @@ namespace DingoJsonUI.GUI
             if (!TryGetPath(node, out var path))
                 return;
 
-            DrawLabel(node);
-            ImGui.SameLine(LabelColumnWidth);
-            SetNextItemWidth(node);
+            BeginValueField(node);
 
             var current = _document.GetValue(path, 0f).ToString("G", CultureInfo.InvariantCulture);
             var buffer = GetBuffer(path, current);
@@ -315,15 +424,62 @@ namespace DingoJsonUI.GUI
 
             if (ImGui.InputText("##value", ref buffer, 64))
             {
-                _textBuffers[path] = buffer;
+                StoreEditedBuffer(path, buffer);
                 if (float.TryParse(buffer, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var parsed))
+                {
                     _document.SetValue(path, new JValue(parsed));
+                    current = parsed.ToString("G", CultureInfo.InvariantCulture);
+                }
             }
+
+            UpdateTextBufferState(path, buffer, current);
 
             if (!IsNodeEnabled(node))
                 ImGui.EndDisabled();
+        }
 
-            _textBuffers[path] = buffer;
+        private void DrawDragInt(JsonUiNode node)
+        {
+            if (!TryGetPath(node, out var path))
+                return;
+
+            BeginValueField(node);
+
+            var value = _document.GetValue(path, 0);
+            var speed = Math.Max(float.Epsilon, node.Step ?? 1f);
+            var min = (int)(node.Min ?? 0f);
+            var max = (int)(node.Max ?? 0f);
+
+            if (!IsNodeEnabled(node))
+                ImGui.BeginDisabled();
+
+            if (ImGui.DragInt("##value", ref value, speed, min, max))
+                _document.SetValue(path, new JValue(value));
+
+            if (!IsNodeEnabled(node))
+                ImGui.EndDisabled();
+        }
+
+        private void DrawDragFloat(JsonUiNode node)
+        {
+            if (!TryGetPath(node, out var path))
+                return;
+
+            BeginValueField(node);
+
+            var value = _document.GetValue(path, 0f);
+            var speed = Math.Max(float.Epsilon, node.Step ?? 0.01f);
+            var min = node.Min ?? 0f;
+            var max = node.Max ?? 0f;
+
+            if (!IsNodeEnabled(node))
+                ImGui.BeginDisabled();
+
+            if (ImGui.DragFloat("##value", ref value, speed, min, max))
+                _document.SetValue(path, new JValue(value));
+
+            if (!IsNodeEnabled(node))
+                ImGui.EndDisabled();
         }
 
         private void DrawIntSlider(JsonUiNode node)
@@ -331,9 +487,7 @@ namespace DingoJsonUI.GUI
             if (!TryGetPath(node, out var path))
                 return;
 
-            DrawLabel(node);
-            ImGui.SameLine(LabelColumnWidth);
-            SetNextItemWidth(node);
+            BeginValueField(node);
 
             var value = _document.GetValue(path, 0);
             var min = (int)(node.Min ?? 0f);
@@ -354,9 +508,7 @@ namespace DingoJsonUI.GUI
             if (!TryGetPath(node, out var path))
                 return;
 
-            DrawLabel(node);
-            ImGui.SameLine(LabelColumnWidth);
-            SetNextItemWidth(node);
+            BeginValueField(node);
 
             var value = _document.GetValue(path, 0f);
             var min = node.Min ?? 0f;
@@ -372,14 +524,75 @@ namespace DingoJsonUI.GUI
                 ImGui.EndDisabled();
         }
 
+        private void DrawVector2(JsonUiNode node)
+        {
+            if (!TryGetPath(node, out var path))
+                return;
+
+            BeginValueField(node);
+
+            var value = ReadVector2(GetToken(path));
+            var speed = Math.Max(float.Epsilon, node.Step ?? 0.01f);
+            var min = node.Min ?? 0f;
+            var max = node.Max ?? 0f;
+
+            if (!IsNodeEnabled(node))
+                ImGui.BeginDisabled();
+
+            if (ImGui.DragFloat2("##value", ref value, speed, min, max))
+                _document.SetValue(path, ToArray(value.X, value.Y));
+
+            if (!IsNodeEnabled(node))
+                ImGui.EndDisabled();
+        }
+
+        private void DrawVector3(JsonUiNode node)
+        {
+            if (!TryGetPath(node, out var path))
+                return;
+
+            BeginValueField(node);
+
+            var value = ReadVector3(GetToken(path));
+            var speed = Math.Max(float.Epsilon, node.Step ?? 0.01f);
+            var min = node.Min ?? 0f;
+            var max = node.Max ?? 0f;
+
+            if (!IsNodeEnabled(node))
+                ImGui.BeginDisabled();
+
+            if (ImGui.DragFloat3("##value", ref value, speed, min, max))
+                _document.SetValue(path, ToArray(value.X, value.Y, value.Z));
+
+            if (!IsNodeEnabled(node))
+                ImGui.EndDisabled();
+        }
+
+        private void DrawColor(JsonUiNode node)
+        {
+            if (!TryGetPath(node, out var path))
+                return;
+
+            BeginValueField(node);
+
+            var value = ReadColor(GetToken(path));
+
+            if (!IsNodeEnabled(node))
+                ImGui.BeginDisabled();
+
+            if (ImGui.ColorEdit4("##value", ref value))
+                _document.SetValue(path, ToArray(value.X, value.Y, value.Z, value.W));
+
+            if (!IsNodeEnabled(node))
+                ImGui.EndDisabled();
+        }
+
         private void DrawSelect(JsonUiNode node)
         {
             if (!TryGetPath(node, out var path))
                 return;
 
-            DrawLabel(node);
-            ImGui.SameLine(LabelColumnWidth);
-            SetNextItemWidth(node);
+            BeginValueField(node);
 
             var current = GetToken(path);
             var preview = FindOptionLabel(node, current) ?? FormatToken(current);
@@ -409,19 +622,53 @@ namespace DingoJsonUI.GUI
                 ImGui.EndDisabled();
         }
 
+        private void DrawRadio(JsonUiNode node)
+        {
+            if (!TryGetPath(node, out var path))
+                return;
+
+            BeginValueField(node, MinimumFieldWidth, false);
+
+            var current = GetToken(path);
+            var options = node.SafeOptions;
+            var wrap = node.Wrap != false;
+            var spacing = CurrentLayout.Spacing ?? ImGui.GetStyle().ItemSpacing.X;
+
+            if (!IsNodeEnabled(node))
+                ImGui.BeginDisabled();
+
+            for (var i = 0; i < options.Count; i++)
+            {
+                if (i > 0)
+                {
+                    var nextWidth = EstimateRadioOptionWidth(options[i]);
+                    if (!wrap || CanFitSameLine(nextWidth, spacing))
+                        ImGui.SameLine(0f, spacing);
+                }
+
+                var option = options[i];
+                var value = option.Value ?? JValue.CreateNull();
+                var selected = JToken.DeepEquals(current, value);
+                if (ImGui.RadioButton(option.Label ?? FormatToken(value), selected))
+                    _document.SetValue(path, value);
+            }
+
+            if (!IsNodeEnabled(node))
+                ImGui.EndDisabled();
+        }
+
         private void DrawProgress(JsonUiNode node)
         {
             if (!TryGetPath(node, out var path))
                 return;
 
-            DrawLabel(node);
-            ImGui.SameLine(LabelColumnWidth);
+            var width = BeginValueField(node, MinimumFieldWidth, false);
             var value = _document.GetValue(path, 0f);
             var min = node.Min ?? 0f;
             var max = node.Max ?? 1f;
             var range = Math.Max(float.Epsilon, max - min);
             var normalized = Math.Max(0f, Math.Min(1f, (value - min) / range));
-            ImGui.ProgressBar(normalized, new System.Numerics.Vector2(Math.Max(MinimumFieldWidth, ImGui.GetContentRegionAvail().X), 0f));
+            ImGui.ProgressBar(normalized, new System.Numerics.Vector2(width, 0f));
         }
 
         private void DrawAutoField(JsonUiNode node)
@@ -432,8 +679,7 @@ namespace DingoJsonUI.GUI
             var token = GetToken(path);
             if (token == null || token.Type == JTokenType.Null)
             {
-                DrawLabel(node);
-                ImGui.SameLine(LabelColumnWidth);
+                BeginValueField(node, MinimumFieldWidth, false);
                 ImGui.TextDisabled("null");
                 return;
             }
@@ -488,10 +734,84 @@ namespace DingoJsonUI.GUI
             return Commands.TryGet(action, out command);
         }
 
+        private JsonUiLayoutScope CurrentLayout => _layoutScopes.Count > 0
+            ? _layoutScopes.Peek()
+            : new JsonUiLayoutScope(DefaultLabelColumnWidth, null, 0f, false);
+
+        private void PushLayoutScope(JsonUiNode node)
+        {
+            var parent = CurrentLayout;
+            var labelWidth = Math.Max(MinimumLabelColumnWidth, node.LabelWidth ?? parent.LabelWidth);
+            var spacing = node.Spacing ?? parent.Spacing;
+            var indent = Math.Max(0f, node.Indent ?? 0f);
+            var pushedSpacing = node.Spacing.HasValue;
+
+            if (pushedSpacing)
+                ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new System.Numerics.Vector2(Math.Max(0f, node.Spacing.Value), Math.Max(0f, node.Spacing.Value)));
+
+            if (indent > 0f)
+                ImGui.Indent(indent);
+
+            _layoutScopes.Push(new JsonUiLayoutScope(labelWidth, spacing, indent, pushedSpacing));
+        }
+
+        private void PopLayoutScope()
+        {
+            var scope = _layoutScopes.Pop();
+
+            if (scope.Indent > 0f)
+                ImGui.Unindent(scope.Indent);
+
+            if (scope.PushedSpacing)
+                ImGui.PopStyleVar();
+        }
+
+        private float BeginValueField(JsonUiNode node, float minimumWidth = MinimumFieldWidth, bool setNextItemWidth = true)
+        {
+            var available = Math.Max(1f, ImGui.GetContentRegionAvail().X);
+            var label = GetLabelText(node);
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                var fullWidth = ResolveItemWidth(node, available, minimumWidth);
+                if (setNextItemWidth)
+                    ImGui.SetNextItemWidth(fullWidth);
+
+                return fullWidth;
+            }
+
+            var style = ImGui.GetStyle();
+            var lineStartX = ImGui.GetCursorPosX();
+            var inline = available >= MinimumLabelColumnWidth + minimumWidth + style.ItemInnerSpacing.X;
+            if (inline)
+            {
+                var labelWidth = ResolveLabelWidth(node, available, minimumWidth);
+                DrawLabelText(label, Math.Max(1f, labelWidth - style.ItemInnerSpacing.X));
+                ImGui.SameLine(lineStartX + labelWidth, style.ItemInnerSpacing.X);
+
+                var fieldWidth = ResolveItemWidth(node, available - labelWidth - style.ItemInnerSpacing.X, minimumWidth);
+                if (setNextItemWidth)
+                    ImGui.SetNextItemWidth(fieldWidth);
+
+                return fieldWidth;
+            }
+
+            DrawLabelText(label, available);
+            var stackedWidth = ResolveItemWidth(node, ImGui.GetContentRegionAvail().X, minimumWidth);
+            if (setNextItemWidth)
+                ImGui.SetNextItemWidth(stackedWidth);
+
+            return stackedWidth;
+        }
+
         private void DrawLabel(JsonUiNode node)
         {
+            DrawLabelText(GetLabelText(node), 0f);
+        }
+
+        private static void DrawLabelText(string label, float maxWidth)
+        {
             ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted(node.Label ?? node.Path ?? string.Empty);
+            ImGui.TextUnformatted(FitTextToWidth(label ?? string.Empty, maxWidth));
         }
 
         private void DrawTooltip(JsonUiNode node)
@@ -500,10 +820,95 @@ namespace DingoJsonUI.GUI
                 ImGui.SetTooltip(node.Tooltip);
         }
 
-        private void SetNextItemWidth(JsonUiNode node)
+        private float ResolveLabelWidth(JsonUiNode node, float available, float minimumFieldWidth)
         {
-            var width = node.Width ?? ImGui.GetContentRegionAvail().X;
-            ImGui.SetNextItemWidth(Math.Max(MinimumFieldWidth, width));
+            var style = ImGui.GetStyle();
+            var desired = Math.Max(MinimumLabelColumnWidth, node.LabelWidth ?? CurrentLayout.LabelWidth);
+            var max = Math.Max(MinimumLabelColumnWidth, available - minimumFieldWidth - style.ItemInnerSpacing.X);
+            return Math.Min(desired, max);
+        }
+
+        private static float ResolveItemWidth(JsonUiNode node, float available, float minimumWidth)
+        {
+            var max = Math.Max(1f, available);
+            var desired = node.Width ?? max;
+            return Math.Max(1f, Math.Min(Math.Max(minimumWidth, desired), max));
+        }
+
+        private System.Numerics.Vector2 GetButtonSize(JsonUiNode node)
+        {
+            var width = node.Width.HasValue
+                ? ResolveItemWidth(node, ImGui.GetContentRegionAvail().X, 1f)
+                : 0f;
+
+            return new System.Numerics.Vector2(width, node.Height ?? 0f);
+        }
+
+        private bool CanFitSameLine(float nextWidth, float spacing)
+        {
+            var itemRight = ImGui.GetItemRectMax().X;
+            var contentRight = ImGui.GetWindowPos().X + ImGui.GetWindowWidth() - ImGui.GetStyle().WindowPadding.X;
+            return itemRight + spacing + Math.Max(0f, nextWidth) <= contentRight;
+        }
+
+        private float EstimateNodeWidth(JsonUiNode node)
+        {
+            if (node == null)
+                return 0f;
+
+            if (node.Width.HasValue)
+                return node.Width.Value;
+
+            var style = ImGui.GetStyle();
+            switch (NormalizeNodeType(node.Type))
+            {
+                case JsonUiNodeType.Button:
+                    return ImGui.CalcTextSize(node.Label ?? node.Action ?? "Button").X + style.FramePadding.X * 2f;
+                case JsonUiNodeType.Text:
+                    return ImGui.CalcTextSize(node.Text ?? GetLabelText(node)).X;
+                case JsonUiNodeType.Separator:
+                case JsonUiNodeType.Space:
+                    return 0f;
+                default:
+                    return CurrentLayout.LabelWidth + MinimumFieldWidth + style.ItemInnerSpacing.X;
+            }
+        }
+
+        private static float EstimateRadioOptionWidth(JsonUiOption option)
+        {
+            var label = option?.Label ?? FormatToken(option?.Value);
+            var style = ImGui.GetStyle();
+            return ImGui.GetFrameHeight() + style.ItemInnerSpacing.X + ImGui.CalcTextSize(label).X;
+        }
+
+        private static string GetLabelText(JsonUiNode node)
+        {
+            return node?.Label ?? node?.Path ?? string.Empty;
+        }
+
+        private static string FitTextToWidth(string text, float maxWidth)
+        {
+            if (string.IsNullOrEmpty(text) || maxWidth <= 0f || ImGui.CalcTextSize(text).X <= maxWidth)
+                return text ?? string.Empty;
+
+            const string suffix = "...";
+            var suffixWidth = ImGui.CalcTextSize(suffix).X;
+            if (suffixWidth >= maxWidth)
+                return suffix;
+
+            for (var length = text.Length - 1; length > 0; length--)
+            {
+                var candidate = text.Substring(0, length);
+                if (ImGui.CalcTextSize(candidate).X + suffixWidth <= maxWidth)
+                    return candidate + suffix;
+            }
+
+            return suffix;
+        }
+
+        private static string NormalizeNodeType(string type)
+        {
+            return string.IsNullOrWhiteSpace(type) ? JsonUiNodeType.Section : type.Trim();
         }
 
         private JToken GetToken(string path)
@@ -543,9 +948,63 @@ namespace DingoJsonUI.GUI
                 : token.ToString(Newtonsoft.Json.Formatting.None);
         }
 
+        private static System.Numerics.Vector2 ReadVector2(JToken token)
+        {
+            return new System.Numerics.Vector2(
+                ReadComponent(token, 0, "x", 0f),
+                ReadComponent(token, 1, "y", 0f));
+        }
+
+        private static System.Numerics.Vector3 ReadVector3(JToken token)
+        {
+            return new System.Numerics.Vector3(
+                ReadComponent(token, 0, "x", 0f),
+                ReadComponent(token, 1, "y", 0f),
+                ReadComponent(token, 2, "z", 0f));
+        }
+
+        private static System.Numerics.Vector4 ReadColor(JToken token)
+        {
+            return new System.Numerics.Vector4(
+                ReadComponent(token, 0, "r", 1f),
+                ReadComponent(token, 1, "g", 1f),
+                ReadComponent(token, 2, "b", 1f),
+                ReadComponent(token, 3, "a", 1f));
+        }
+
+        private static float ReadComponent(JToken token, int index, string name, float fallback)
+        {
+            try
+            {
+                if (token is JArray array && index >= 0 && index < array.Count)
+                    return array[index].Value<float>();
+
+                if (token is JObject obj && obj.TryGetValue(name, StringComparison.OrdinalIgnoreCase, out var value))
+                    return value.Value<float>();
+            }
+            catch
+            {
+                return fallback;
+            }
+
+            return fallback;
+        }
+
+        private static JArray ToArray(params float[] values)
+        {
+            var array = new JArray();
+            for (var i = 0; i < values.Length; i++)
+                array.Add(values[i]);
+
+            return array;
+        }
+
         private string GetBuffer(string path, string currentValue)
         {
             currentValue ??= string.Empty;
+
+            if (_dirtyTextBuffers.Contains(path) && _textBuffers.TryGetValue(path, out var dirtyBuffer))
+                return dirtyBuffer ?? string.Empty;
 
             if (!_textBuffers.TryGetValue(path, out var buffer) || buffer != currentValue)
             {
@@ -554,6 +1013,28 @@ namespace DingoJsonUI.GUI
             }
 
             return buffer ?? string.Empty;
+        }
+
+        private void StoreEditedBuffer(string path, string buffer)
+        {
+            _textBuffers[path] = buffer ?? string.Empty;
+            _dirtyTextBuffers.Add(path);
+        }
+
+        private void UpdateTextBufferState(string path, string buffer, string currentValue)
+        {
+            currentValue ??= string.Empty;
+
+            if (ImGui.IsItemActive())
+            {
+                StoreEditedBuffer(path, buffer);
+                return;
+            }
+
+            if (_dirtyTextBuffers.Remove(path))
+                _textBuffers[path] = currentValue;
+            else
+                _textBuffers[path] = currentValue;
         }
 
         private string GetNodeId(JsonUiNode node)
@@ -573,6 +1054,22 @@ namespace DingoJsonUI.GUI
             var nextScrollY = ImGui.GetScrollY() - wheel * ScrollWheelPixelsPerStep;
             nextScrollY = Math.Max(0f, Math.Min(ImGui.GetScrollMaxY(), nextScrollY));
             ImGui.SetScrollY(nextScrollY);
+        }
+
+        private readonly struct JsonUiLayoutScope
+        {
+            public JsonUiLayoutScope(float labelWidth, float? spacing, float indent, bool pushedSpacing)
+            {
+                LabelWidth = labelWidth;
+                Spacing = spacing;
+                Indent = indent;
+                PushedSpacing = pushedSpacing;
+            }
+
+            public float LabelWidth { get; }
+            public float? Spacing { get; }
+            public float Indent { get; }
+            public bool PushedSpacing { get; }
         }
     }
 }

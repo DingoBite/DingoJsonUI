@@ -119,101 +119,6 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &230387532
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 230387535}
-  - component: {fileID: 230387534}
-  - component: {fileID: 230387533}
-  m_Layer: 0
-  m_Name: DingoJsonUI Sample
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &230387533
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 230387532}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5664aba8f8d5d0f4490ebe63149eb60a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::DingoJsonUISampleScene
-  _jsonEditor: {fileID: 230387534}
-  _drawFastUi: 1
-  _drawSerializedObjectInspector: 1
-  _drawSerializedObjectMirror: 1
-  _autoApplySerializedObject: 1
-  _playerConfig:
-    Stats:
-      Health: 45
-      MaxHealth: 120
-      Speed: 6.5
-      Alive: 1
-    Loadout:
-    - Id: potion
-      Label: Health Potion
-      Count: 2
-      Equipped: 0
-    - Id: key
-      Label: Copper Key
-      Count: 1
-      Equipped: 1
-    Tags:
-    - serialized
-    - runtime
-    - json
-    UserPreferences:
-      ShowHints: 1
-      MusicVolume: 0.75
-      NullableNote: 
-    _displayName: Inspector Dingo
-    _privateInspectorNote: Private SerializeField is visible
-    HiddenByJsonIgnore: JsonIgnore hides this
---- !u!114 &230387534
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 230387532}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 352a5f17658bfba4090382b954d73ae4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: DingoJsonUI.GUI::DingoJsonUI.GUI.UImGuiJsonEditorBehaviour
-  _jsonAsset: {fileID: 0}
-  _inlineJson: "{\n  \"player\": {\n    \"name\": \"Dingo\",\n    \"hp\": 100,\n   
-    \"speed\": 6.5,\n    \"alive\": true\n  },\n  \"inventory\": [\n    \"key\",\n   
-    \"map\"\n  ]\n}"
-  _windowTitle: Dingo JSON UI
-  _reloadSourceOnEnable: 1
-  _scrollWheelPixelsPerStep: 280
---- !u!4 &230387535
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 230387532}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &372694915
 GameObject:
   m_ObjectHideFlags: 0
@@ -408,6 +313,300 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!1 &592933939
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 592933940}
+  m_Layer: 0
+  m_Name: DingoJsonUI Samples
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &592933940
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 592933939}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 2140394806}
+  - {fileID: 1744687893}
+  - {fileID: 1018261936}
+  - {fileID: 963808890}
+  - {fileID: 1729070612}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &963808889
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 963808890}
+  - component: {fileID: 963808892}
+  - component: {fileID: 963808891}
+  m_Layer: 0
+  m_Name: 04 Screen Behaviour Wrapper
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &963808890
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 963808889}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 592933940}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &963808891
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 963808889}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5839ef1c83073334f8b0fa7c10035013, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DingoJsonUI.Examples.Scripts.DingoJsonUIScreenBehaviourSample
+  _screen: {fileID: 963808892}
+  _initialWindowPosition: {x: 530, y: 520}
+  _initialWindowSize: {x: 500, y: 240}
+--- !u!114 &963808892
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 963808889}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eae6ee405aad5354bbf927e2f1579d57, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: DingoJsonUI.GUI::DingoJsonUI.GUI.UImGuiJsonScreenBehaviour
+  _jsonAsset: {fileID: 0}
+  _inlineJson: "{\n  \"title\": \"Dingo\",\n  \"enabled\": true\n}"
+  _schemaAsset: {fileID: 0}
+  _inlineSchema: "{\n  \"title\": \"Dingo Fast UI\",\n  \"root\": {\n    \"type\":
+    \"section\",\n    \"children\": [\n      { \"type\": \"inputText\", \"label\":
+    \"Title\", \"path\": \"$.title\" },\n      { \"type\": \"toggle\", \"label\":
+    \"Enabled\", \"path\": \"$.enabled\" }\n    ]\n  }\n}"
+  _windowTitle: Dingo Fast UI
+  _reloadSourcesOnEnable: 1
+  _showDiagnostics: 1
+  _showDiagnosticsWhenValid: 0
+  _registerDefaultPayloadCommands: 1
+  _scrollWheelPixelsPerStep: 280
+  _applyInitialWindowPlacement: 0
+  _initialWindowPosition: {x: 60, y: 60}
+  _initialWindowSize: {x: 430, y: 260}
+--- !u!1 &1018261935
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1018261936}
+  - component: {fileID: 1018261937}
+  m_Layer: 0
+  m_Name: 03 Serialized Object Inspector
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1018261936
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1018261935}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 592933940}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1018261937
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1018261935}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c4327a8ec835081418addb86fa5f7f49, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DingoJsonUI.Examples.Scripts.DingoJsonUISerializedObjectSample
+  _drawInspector: 1
+  _drawAppliedTarget: 1
+  _autoApply: 1
+  _inspectorPosition: {x: 24, y: 290}
+  _inspectorSize: {x: 490, y: 235}
+  _targetPosition: {x: 530, y: 290}
+  _targetSize: {x: 500, y: 210}
+  _playerConfig:
+    Stats:
+      Health: 45
+      MaxHealth: 120
+      Speed: 6.5
+      Alive: 1
+    Loadout:
+    - Id: potion
+      Label: Health Potion
+      Count: 2
+      Equipped: 0
+    - Id: key
+      Label: Copper Key
+      Count: 1
+      Equipped: 1
+    Tags:
+    - serialized
+    - runtime
+    - json
+    UserPreferences:
+      ShowHints: 1
+      MusicVolume: 0.75
+      NullableNote: 
+    PreviewAsset: {fileID: 0}
+    _displayName: Inspector Dingo
+    _privateInspectorNote: Private SerializeField is visible
+    HiddenByJsonIgnore: JsonIgnore hides this
+--- !u!1 &1729070611
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1729070612}
+  - component: {fileID: 1729070613}
+  m_Layer: 0
+  m_Name: 05 Feature Gallery
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1729070612
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1729070611}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 592933940}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1729070613
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1729070611}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c1867c31c307a89418b6530c033067ea, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DingoJsonUI.Examples.Scripts.DingoJsonUIFeatureGallerySample
+  _drawFeatureGallery: 1
+  _drawLargeDataEditor: 1
+  _drawValidatorDiagnostics: 1
+  _drawCustomSerialization: 1
+  _featureGalleryPosition: {x: 24, y: 540}
+  _featureGallerySize: {x: 490, y: 300}
+  _validatorPosition: {x: 530, y: 780}
+  _validatorSize: {x: 500, y: 230}
+  _largeDataPosition: {x: 1045, y: 18}
+  _largeDataSize: {x: 500, y: 350}
+  _customPosition: {x: 1045, y: 390}
+  _customSize: {x: 500, y: 260}
+--- !u!1 &1744687892
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1744687893}
+  - component: {fileID: 1744687894}
+  m_Layer: 0
+  m_Name: 02 Schema Screen
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1744687893
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1744687892}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 592933940}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1744687894
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1744687892}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f32eda3d30627784da1ba3bbc409b776, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DingoJsonUI.Examples.Scripts.DingoJsonUIScreenSchemaSample
+  _sourceSample: {fileID: 2140394805}
+  _draw: 1
+  _initialWindowPosition: {x: 530, y: 18}
+  _initialWindowSize: {x: 500, y: 250}
 --- !u!1 &1790194365
 GameObject:
   m_ObjectHideFlags: 0
@@ -535,10 +734,60 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!1 &2140394804
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2140394806}
+  - component: {fileID: 2140394805}
+  m_Layer: 0
+  m_Name: 01 Raw JSON Editor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2140394805
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2140394804}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce24744535007fe438551661c5bb0123, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DingoJsonUI.Examples.Scripts.DingoJsonUIRawEditorSample
+  _draw: 1
+  _windowTitle: 01 Raw JSON Editor
+  _initialWindowPosition: {x: 24, y: 18}
+  _initialWindowSize: {x: 490, y: 250}
+  _maxVisibleChildrenPerNode: 8
+  _maxRenderDepth: 16
+--- !u!4 &2140394806
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2140394804}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 592933940}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 372694918}
   - {fileID: 1790194367}
-  - {fileID: 230387535}
+  - {fileID: 592933940}

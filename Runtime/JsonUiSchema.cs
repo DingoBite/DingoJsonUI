@@ -13,15 +13,23 @@ namespace DingoJsonUI
         public const string Row = "row";
         public const string Columns = "columns";
         public const string Tabs = "tabs";
+        public const string Include = "include";
         public const string Text = "text";
         public const string Field = "field";
         public const string InputText = "inputText";
+        public const string InputTextMultiline = "inputTextMultiline";
         public const string Integer = "int";
         public const string Float = "float";
+        public const string DragInt = "dragInt";
+        public const string DragFloat = "dragFloat";
         public const string Toggle = "toggle";
         public const string SliderInt = "sliderInt";
         public const string SliderFloat = "sliderFloat";
+        public const string Vector2 = "vector2";
+        public const string Vector3 = "vector3";
+        public const string Color = "color";
         public const string Select = "select";
+        public const string Radio = "radio";
         public const string Button = "button";
         public const string Progress = "progress";
         public const string Separator = "separator";
@@ -35,6 +43,9 @@ namespace DingoJsonUI
 
         [JsonProperty("root")]
         public JsonUiNode Root { get; set; } = new();
+
+        [JsonProperty("templates")]
+        public Dictionary<string, JsonUiNode> Templates { get; set; } = new(StringComparer.Ordinal);
 
         public static JsonUiSchema FromJson(string json)
         {
@@ -54,6 +65,230 @@ namespace DingoJsonUI
                 Root = rootObject.ToObject<JsonUiNode>() ?? new JsonUiNode(),
             };
         }
+
+        public static bool IsTemplateReference(JsonUiNode node)
+        {
+            if (node == null)
+                return false;
+
+            return !string.IsNullOrWhiteSpace(GetTemplateName(node))
+                   || string.Equals(NormalizeType(node.Type), JsonUiNodeType.Include, StringComparison.Ordinal);
+        }
+
+        public static string GetTemplateName(JsonUiNode node)
+        {
+            if (node == null)
+                return null;
+
+            return !string.IsNullOrWhiteSpace(node.Template)
+                ? node.Template
+                : !string.IsNullOrWhiteSpace(node.Use)
+                    ? node.Use
+                    : null;
+        }
+
+        public bool TryCreateTemplateInstance(JsonUiNode includeNode, out JsonUiNode instance)
+        {
+            instance = null;
+            var templateName = GetTemplateName(includeNode);
+            if (string.IsNullOrWhiteSpace(templateName)
+                || Templates == null
+                || !Templates.TryGetValue(templateName, out var template)
+                || template == null)
+            {
+                return false;
+            }
+
+            instance = CloneNode(template);
+            ApplyTemplateOverrides(instance, includeNode);
+            return true;
+        }
+
+        internal static string NormalizeType(string type)
+        {
+            return string.IsNullOrWhiteSpace(type) ? JsonUiNodeType.Section : type.Trim();
+        }
+
+        private static JsonUiNode CloneNode(JsonUiNode source)
+        {
+            if (source == null)
+                return null;
+
+            var clone = new JsonUiNode
+            {
+                Type = source.Type,
+                Id = source.Id,
+                Label = source.Label,
+                Path = source.Path,
+                Action = source.Action,
+                Tooltip = source.Tooltip,
+                Visible = source.Visible,
+                Enabled = source.Enabled,
+                VisibleWhen = CloneCondition(source.VisibleWhen),
+                EnabledWhen = CloneCondition(source.EnabledWhen),
+                Payload = source.Payload?.DeepClone(),
+                SameLine = source.SameLine,
+                DefaultOpen = source.DefaultOpen,
+                Width = source.Width,
+                Height = source.Height,
+                LabelWidth = source.LabelWidth,
+                Spacing = source.Spacing,
+                Indent = source.Indent,
+                Wrap = source.Wrap,
+                Step = source.Step,
+                Min = source.Min,
+                Max = source.Max,
+                Columns = source.Columns,
+                Text = source.Text,
+                Template = source.Template,
+                Use = source.Use,
+                Children = CloneNodes(source.Children),
+                Options = CloneOptions(source.Options),
+            };
+
+            return clone;
+        }
+
+        private static void ApplyTemplateOverrides(JsonUiNode target, JsonUiNode overrides)
+        {
+            if (target == null || overrides == null)
+                return;
+
+            var overrideType = NormalizeType(overrides.Type);
+            var overrideUsesTemplate = !string.IsNullOrWhiteSpace(overrides.Template) || !string.IsNullOrWhiteSpace(overrides.Use);
+            if (!string.IsNullOrWhiteSpace(overrides.Type)
+                && overrideType != JsonUiNodeType.Include
+                && !(overrideUsesTemplate && overrideType == JsonUiNodeType.Section))
+            {
+                target.Type = overrides.Type;
+            }
+
+            if (!string.IsNullOrWhiteSpace(overrides.Id))
+                target.Id = overrides.Id;
+
+            if (overrides.Label != null)
+                target.Label = overrides.Label;
+
+            if (overrides.Path != null)
+                target.Path = overrides.Path;
+
+            if (overrides.Action != null)
+                target.Action = overrides.Action;
+
+            if (overrides.Tooltip != null)
+                target.Tooltip = overrides.Tooltip;
+
+            if (overrides.Visible.HasValue)
+                target.Visible = overrides.Visible;
+
+            if (overrides.Enabled.HasValue)
+                target.Enabled = overrides.Enabled;
+
+            if (overrides.VisibleWhen != null)
+                target.VisibleWhen = CloneCondition(overrides.VisibleWhen);
+
+            if (overrides.EnabledWhen != null)
+                target.EnabledWhen = CloneCondition(overrides.EnabledWhen);
+
+            if (overrides.Payload != null)
+                target.Payload = overrides.Payload.DeepClone();
+
+            if (overrides.SameLine)
+                target.SameLine = true;
+
+            if (overrides.DefaultOpen.HasValue)
+                target.DefaultOpen = overrides.DefaultOpen;
+
+            if (overrides.Width.HasValue)
+                target.Width = overrides.Width;
+
+            if (overrides.Height.HasValue)
+                target.Height = overrides.Height;
+
+            if (overrides.LabelWidth.HasValue)
+                target.LabelWidth = overrides.LabelWidth;
+
+            if (overrides.Spacing.HasValue)
+                target.Spacing = overrides.Spacing;
+
+            if (overrides.Indent.HasValue)
+                target.Indent = overrides.Indent;
+
+            if (overrides.Wrap.HasValue)
+                target.Wrap = overrides.Wrap;
+
+            if (overrides.Step.HasValue)
+                target.Step = overrides.Step;
+
+            if (overrides.Min.HasValue)
+                target.Min = overrides.Min;
+
+            if (overrides.Max.HasValue)
+                target.Max = overrides.Max;
+
+            if (overrides.Columns.HasValue)
+                target.Columns = overrides.Columns;
+
+            if (overrides.Text != null)
+                target.Text = overrides.Text;
+
+            if (overrides.Children != null && overrides.Children.Count > 0)
+                target.Children = CloneNodes(overrides.Children);
+
+            if (overrides.Options != null && overrides.Options.Count > 0)
+                target.Options = CloneOptions(overrides.Options);
+        }
+
+        private static JsonUiCondition CloneCondition(JsonUiCondition condition)
+        {
+            if (condition == null)
+                return null;
+
+            return new JsonUiCondition
+            {
+                Path = condition.Path,
+                EqualValue = condition.EqualValue?.DeepClone(),
+                NotEqualValue = condition.NotEqualValue?.DeepClone(),
+                Exists = condition.Exists,
+                Truthy = condition.Truthy,
+                GreaterThan = condition.GreaterThan,
+                GreaterThanOrEqual = condition.GreaterThanOrEqual,
+                LessThan = condition.LessThan,
+                LessThanOrEqual = condition.LessThanOrEqual,
+                Not = condition.Not,
+            };
+        }
+
+        private static List<JsonUiNode> CloneNodes(IReadOnlyList<JsonUiNode> nodes)
+        {
+            var clone = new List<JsonUiNode>();
+            if (nodes == null)
+                return clone;
+
+            for (var i = 0; i < nodes.Count; i++)
+                clone.Add(CloneNode(nodes[i]));
+
+            return clone;
+        }
+
+        private static List<JsonUiOption> CloneOptions(IReadOnlyList<JsonUiOption> options)
+        {
+            var clone = new List<JsonUiOption>();
+            if (options == null)
+                return clone;
+
+            for (var i = 0; i < options.Count; i++)
+            {
+                var option = options[i];
+                clone.Add(new JsonUiOption
+                {
+                    Label = option?.Label,
+                    Value = option?.Value?.DeepClone(),
+                });
+            }
+
+            return clone;
+        }
     }
 
     public sealed class JsonUiNode
@@ -72,6 +307,12 @@ namespace DingoJsonUI
 
         [JsonProperty("action")]
         public string Action { get; set; }
+
+        [JsonProperty("template")]
+        public string Template { get; set; }
+
+        [JsonProperty("use")]
+        public string Use { get; set; }
 
         [JsonProperty("tooltip")]
         public string Tooltip { get; set; }
@@ -99,6 +340,24 @@ namespace DingoJsonUI
 
         [JsonProperty("width")]
         public float? Width { get; set; }
+
+        [JsonProperty("height")]
+        public float? Height { get; set; }
+
+        [JsonProperty("labelWidth")]
+        public float? LabelWidth { get; set; }
+
+        [JsonProperty("spacing")]
+        public float? Spacing { get; set; }
+
+        [JsonProperty("indent")]
+        public float? Indent { get; set; }
+
+        [JsonProperty("wrap")]
+        public bool? Wrap { get; set; }
+
+        [JsonProperty("step")]
+        public float? Step { get; set; }
 
         [JsonProperty("min")]
         public float? Min { get; set; }

@@ -103,6 +103,7 @@ namespace DingoJsonUI
                 ContractResolver = new UnityInspectorContractResolver(),
                 Formatting = Formatting.Indented,
                 ObjectCreationHandling = ObjectCreationHandling.Replace,
+                ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
             };
         }
     }
@@ -119,7 +120,18 @@ namespace DingoJsonUI
                 var property = CreateProperty(member, memberSerialization);
                 property.Ignored = HasAttribute<JsonIgnoreAttribute>(member);
                 property.Readable = CanRead(member);
-                property.Writable = CanWrite(member);
+
+                var memberType = GetMemberType(member);
+                if (IsUnsupportedMemberType(memberType))
+                {
+                    property.ValueProvider = new UnsupportedJsonFieldValueProvider(memberType);
+                    property.PropertyType = typeof(string);
+                    property.Writable = false;
+                }
+                else
+                {
+                    property.Writable = CanWrite(member);
+                }
 
                 if (!property.Ignored && property.Readable && propertyNames.Add(property.PropertyName))
                     result.Add(property);
@@ -195,9 +207,89 @@ namespace DingoJsonUI
             };
         }
 
+        private static Type GetMemberType(MemberInfo member)
+        {
+            return member switch
+            {
+                FieldInfo field => field.FieldType,
+                PropertyInfo property => property.PropertyType,
+                _ => typeof(object),
+            };
+        }
+
+        private static bool IsUnsupportedMemberType(Type type)
+        {
+            if (type == null)
+                return false;
+
+            if (typeof(UnityEngine.Object).IsAssignableFrom(type)
+                || typeof(Delegate).IsAssignableFrom(type)
+                || type == typeof(IntPtr)
+                || type == typeof(UIntPtr)
+                || type.IsPointer)
+            {
+                return true;
+            }
+
+            if (type.IsArray)
+                return IsUnsupportedMemberType(type.GetElementType());
+
+            if (type != typeof(string) && type.IsGenericType)
+            {
+                var arguments = type.GetGenericArguments();
+                for (var i = 0; i < arguments.Length; i++)
+                {
+                    if (IsUnsupportedMemberType(arguments[i]))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
         private static bool HasAttribute<TAttribute>(MemberInfo member) where TAttribute : Attribute
         {
             return Attribute.IsDefined(member, typeof(TAttribute), inherit: true);
+        }
+
+        private sealed class UnsupportedJsonFieldValueProvider : IValueProvider
+        {
+            private readonly Type _type;
+
+            public UnsupportedJsonFieldValueProvider(Type type)
+            {
+                _type = type ?? typeof(object);
+            }
+
+            public object GetValue(object target)
+            {
+                return $"not supported field ({GetFriendlyTypeName(_type)})";
+            }
+
+            public void SetValue(object target, object value)
+            {
+            }
+
+            private static string GetFriendlyTypeName(Type type)
+            {
+                if (type == null)
+                    return "unknown";
+
+                if (!type.IsGenericType)
+                    return type.FullName ?? type.Name;
+
+                var typeName = type.FullName ?? type.Name;
+                var markerIndex = typeName.IndexOf('`');
+                if (markerIndex >= 0)
+                    typeName = typeName.Substring(0, markerIndex);
+
+                var arguments = type.GetGenericArguments();
+                var names = new string[arguments.Length];
+                for (var i = 0; i < arguments.Length; i++)
+                    names[i] = GetFriendlyTypeName(arguments[i]);
+
+                return $"{typeName}<{string.Join(", ", names)}>";
+            }
         }
     }
 }

@@ -29,6 +29,9 @@ namespace DingoJsonUI.GUI
 
         private readonly JsonDocumentModel _document;
         private readonly Dictionary<string, string> _textBuffers = new();
+        private readonly HashSet<string> _dirtyTextBuffers = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _pageOffsets = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, ObjectPropertyCache> _objectPropertyCaches = new(StringComparer.Ordinal);
         private readonly List<JsonUiAction> _actionBuffer = new();
 
         public JsonUiActionCollection Actions { get; } = new();
@@ -36,6 +39,9 @@ namespace DingoJsonUI.GUI
         public string WindowTitle { get; set; }
         public bool ShowTypeHints { get; set; } = true;
         public float ScrollWheelPixelsPerStep { get; set; } = DefaultScrollWheelPixelsPerStep;
+        public bool EnableLargeDataPaging { get; set; } = true;
+        public int MaxVisibleChildrenPerNode { get; set; } = JsonUiLargeData.DefaultMaxVisibleChildrenPerNode;
+        public int MaxRenderDepth { get; set; } = JsonUiLargeData.DefaultMaxRenderDepth;
 
         public UImGuiJsonEditor(JsonDocumentModel document, string windowTitle = "Dingo JSON UI")
         {
@@ -57,7 +63,7 @@ namespace DingoJsonUI.GUI
             ApplyScrollWheelAcceleration();
             DrawToolbar();
             ImGui.Separator();
-            DrawToken(JsonPath.Root, "root", _document.RootToken, true);
+            DrawToken(JsonPath.Root, "root", _document.RootToken, true, 0);
 
             ImGui.End();
         }
@@ -75,7 +81,7 @@ namespace DingoJsonUI.GUI
             ImGui.TextDisabled($"root: {typeName}");
         }
 
-        private void DrawToken(string path, string label, JToken token, bool defaultOpen = false)
+        private void DrawToken(string path, string label, JToken token, bool defaultOpen = false, int depth = 0)
         {
             if (token == null)
             {
@@ -89,10 +95,10 @@ namespace DingoJsonUI.GUI
             switch (token.Type)
             {
                 case JTokenType.Object:
-                    DrawObject(path, label, (JObject)token, defaultOpen);
+                    DrawObject(path, label, (JObject)token, defaultOpen, depth);
                     break;
                 case JTokenType.Array:
-                    DrawArray(path, label, (JArray)token, defaultOpen);
+                    DrawArray(path, label, (JArray)token, defaultOpen, depth);
                     break;
                 default:
                     DrawValue(path, label, (JValue)token);
@@ -100,7 +106,7 @@ namespace DingoJsonUI.GUI
             }
         }
 
-        private void DrawObject(string path, string label, JObject token, bool defaultOpen)
+        private void DrawObject(string path, string label, JObject token, bool defaultOpen, int depth)
         {
             var flags = defaultOpen ? ImGuiTreeNodeFlags.DefaultOpen : ImGuiTreeNodeFlags.None;
             flags |= ImGuiTreeNodeFlags.OpenOnArrow | ImGuiTreeNodeFlags.OpenOnDoubleClick;
@@ -111,13 +117,29 @@ namespace DingoJsonUI.GUI
             if (!isOpen)
                 return;
 
-            foreach (var property in token.Properties())
-                DrawToken(JsonPath.BuildPropertyPath(path, property.Name), property.Name, property.Value);
+            if (IsDepthLimitReached(depth))
+            {
+                DrawDepthLimitMessage();
+                ImGui.TreePop();
+                return;
+            }
+
+            var range = GetVisibleRange(path, token.Count);
+            DrawPagingControls(path, range, "properties", "top");
+
+            var properties = GetObjectPropertyNames(path, token);
+            for (var i = range.Offset; i < range.EndExclusive && i < properties.Length; i++)
+            {
+                var propertyName = properties[i];
+                DrawToken(JsonPath.BuildPropertyPath(path, propertyName), propertyName, token[propertyName], false, depth + 1);
+            }
+
+            DrawPagingControls(path, range, "properties", "bottom");
 
             ImGui.TreePop();
         }
 
-        private void DrawArray(string path, string label, JArray token, bool defaultOpen)
+        private void DrawArray(string path, string label, JArray token, bool defaultOpen, int depth)
         {
             var flags = defaultOpen ? ImGuiTreeNodeFlags.DefaultOpen : ImGuiTreeNodeFlags.None;
             flags |= ImGuiTreeNodeFlags.OpenOnArrow | ImGuiTreeNodeFlags.OpenOnDoubleClick;
@@ -128,10 +150,95 @@ namespace DingoJsonUI.GUI
             if (!isOpen)
                 return;
 
-            for (var i = 0; i < token.Count; i++)
-                DrawToken(JsonPath.BuildIndexPath(path, i), $"[{i}]", token[i]);
+            if (IsDepthLimitReached(depth))
+            {
+                DrawDepthLimitMessage();
+                ImGui.TreePop();
+                return;
+            }
+
+            var range = GetVisibleRange(path, token.Count);
+            DrawPagingControls(path, range, "items", "top");
+
+            for (var i = range.Offset; i < range.EndExclusive; i++)
+                DrawToken(JsonPath.BuildIndexPath(path, i), $"[{i}]", token[i], false, depth + 1);
+
+            DrawPagingControls(path, range, "items", "bottom");
 
             ImGui.TreePop();
+        }
+
+        private JsonUiVisibleRange GetVisibleRange(string path, int totalCount)
+        {
+            if (!EnableLargeDataPaging)
+                return JsonUiLargeData.CalculateVisibleRange(totalCount, 0, 0);
+
+            _pageOffsets.TryGetValue(path, out var offset);
+            var range = JsonUiLargeData.CalculateVisibleRange(totalCount, offset, MaxVisibleChildrenPerNode);
+            if (range.Offset != offset)
+                _pageOffsets[path] = range.Offset;
+
+            return range;
+        }
+
+        private string[] GetObjectPropertyNames(string path, JObject token)
+        {
+            var version = _document?.Version ?? 0;
+            if (_objectPropertyCaches.TryGetValue(path, out var cache)
+                && cache.DocumentVersion == version
+                && cache.TotalCount == token.Count)
+            {
+                return cache.PropertyNames;
+            }
+
+            var propertyNames = new string[token.Count];
+            var index = 0;
+            foreach (var property in token.Properties())
+                propertyNames[index++] = property.Name;
+
+            _objectPropertyCaches[path] = new ObjectPropertyCache(version, token.Count, propertyNames);
+            return propertyNames;
+        }
+
+        private void DrawPagingControls(string path, JsonUiVisibleRange range, string itemLabel, string placement)
+        {
+            if (!range.IsPaged)
+                return;
+
+            ImGui.PushID($"paging:{path}:{placement}");
+            ImGui.TextDisabled($"{range.Offset + 1}-{range.EndExclusive} / {range.TotalCount} {itemLabel}");
+            ImGui.SameLine();
+
+            DrawPageButton("<<", range.HasPrevious, () => _pageOffsets[path] = 0);
+            ImGui.SameLine();
+            DrawPageButton("<", range.HasPrevious, () => _pageOffsets[path] = JsonUiLargeData.GetPreviousPageOffset(range, MaxVisibleChildrenPerNode));
+            ImGui.SameLine();
+            DrawPageButton(">", range.HasNext, () => _pageOffsets[path] = JsonUiLargeData.GetNextPageOffset(range, MaxVisibleChildrenPerNode));
+            ImGui.SameLine();
+            DrawPageButton(">>", range.HasNext, () => _pageOffsets[path] = JsonUiLargeData.GetLastPageOffset(range.TotalCount, MaxVisibleChildrenPerNode));
+            ImGui.PopID();
+        }
+
+        private static void DrawPageButton(string label, bool enabled, Action onClick)
+        {
+            if (!enabled)
+                ImGui.BeginDisabled();
+
+            if (ImGui.SmallButton(label) && enabled)
+                onClick?.Invoke();
+
+            if (!enabled)
+                ImGui.EndDisabled();
+        }
+
+        private bool IsDepthLimitReached(int depth)
+        {
+            return MaxRenderDepth >= 0 && depth >= MaxRenderDepth;
+        }
+
+        private void DrawDepthLimitMessage()
+        {
+            ImGui.TextDisabled($"max render depth reached ({MaxRenderDepth})");
         }
 
         private void DrawValue(string path, string label, JValue value)
@@ -294,12 +401,12 @@ namespace DingoJsonUI.GUI
             var buffer = GetBuffer(path, currentValue);
             if (ImGui.InputText("##value", ref buffer, 2048))
             {
-                _textBuffers[path] = buffer;
+                StoreEditedBuffer(path, buffer);
                 _document.SetValue(path, new JValue(buffer));
-                return;
+                currentValue = buffer;
             }
 
-            _textBuffers[path] = buffer;
+            UpdateTextBufferState(path, buffer, currentValue);
         }
 
         private void DrawIntegerField(string path, JValue value)
@@ -309,13 +416,15 @@ namespace DingoJsonUI.GUI
 
             if (ImGui.InputText("##value", ref buffer, 64))
             {
-                _textBuffers[path] = buffer;
+                StoreEditedBuffer(path, buffer);
                 if (long.TryParse(buffer, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+                {
                     _document.SetValue(path, new JValue(parsed));
-                return;
+                    currentValue = parsed.ToString(CultureInfo.InvariantCulture);
+                }
             }
 
-            _textBuffers[path] = buffer;
+            UpdateTextBufferState(path, buffer, currentValue);
         }
 
         private void DrawFloatField(string path, JValue value)
@@ -325,17 +434,24 @@ namespace DingoJsonUI.GUI
 
             if (ImGui.InputText("##value", ref buffer, 64))
             {
-                _textBuffers[path] = buffer;
+                StoreEditedBuffer(path, buffer);
                 if (double.TryParse(buffer, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var parsed))
+                {
                     _document.SetValue(path, new JValue(parsed));
-                return;
+                    currentValue = parsed.ToString("G", CultureInfo.InvariantCulture);
+                }
             }
 
-            _textBuffers[path] = buffer;
+            UpdateTextBufferState(path, buffer, currentValue);
         }
 
         private string GetBuffer(string path, string currentValue)
         {
+            currentValue ??= string.Empty;
+
+            if (_dirtyTextBuffers.Contains(path) && _textBuffers.TryGetValue(path, out var dirtyBuffer))
+                return dirtyBuffer ?? string.Empty;
+
             if (!_textBuffers.TryGetValue(path, out var buffer) || buffer != currentValue)
             {
                 _textBuffers[path] = currentValue;
@@ -343,6 +459,42 @@ namespace DingoJsonUI.GUI
             }
 
             return buffer;
+        }
+
+        private void StoreEditedBuffer(string path, string buffer)
+        {
+            _textBuffers[path] = buffer ?? string.Empty;
+            _dirtyTextBuffers.Add(path);
+        }
+
+        private void UpdateTextBufferState(string path, string buffer, string currentValue)
+        {
+            currentValue ??= string.Empty;
+
+            if (ImGui.IsItemActive())
+            {
+                StoreEditedBuffer(path, buffer);
+                return;
+            }
+
+            if (_dirtyTextBuffers.Remove(path))
+                _textBuffers[path] = currentValue;
+            else
+                _textBuffers[path] = currentValue;
+        }
+
+        private readonly struct ObjectPropertyCache
+        {
+            public ObjectPropertyCache(int documentVersion, int totalCount, string[] propertyNames)
+            {
+                DocumentVersion = documentVersion;
+                TotalCount = totalCount;
+                PropertyNames = propertyNames ?? Array.Empty<string>();
+            }
+
+            public int DocumentVersion { get; }
+            public int TotalCount { get; }
+            public string[] PropertyNames { get; }
         }
     }
 }

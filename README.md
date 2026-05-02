@@ -18,7 +18,7 @@ This repository is meant to live comfortably inside `Assets/AppSDK/` as a standa
 - `Tests/Editor/`
   Edit-mode coverage for JSONPath matching and change propagation.
 - `Examples/`
-  A sample scene covering JSON editing, inline/toolbar buttons, subscriptions, and the `JsonSerializedObject<T>` inspector.
+  A sample scene split by feature: raw JSON editor/actions/subscriptions, schema-driven screen, `JsonSerializedObject<T>` inspector, the `UImGuiJsonScreenBehaviour` wrapper, and a feature gallery for widgets, layout, payload commands, validator diagnostics, large data, and custom serialization delegates.
 
 ## Dependencies
 
@@ -51,6 +51,25 @@ document.SetValue("$.player.hp", new JValue(75));
 document.SetValue("$.player.name", new JValue("Dingo"));
 ```
 
+For new fast UI code, prefer the high-level session API. It keeps the document, schema, commands, options, and diagnostics together:
+
+```csharp
+var session = JsonUi.Session(
+    json: @"{""volume"":0.75,""debug"":false}",
+    schemaJson: @"{
+      ""root"": {
+        ""type"": ""section"",
+        ""children"": [
+          { ""type"": ""sliderFloat"", ""label"": ""Volume"", ""path"": ""$.volume"", ""min"": 0, ""max"": 1 },
+          { ""type"": ""toggle"", ""label"": ""Debug"", ""path"": ""$.debug"" }
+        ]
+      }
+    }");
+
+var screen = UImGuiJsonUi.Screen(session);
+screen.Draw();
+```
+
 Wildcard subscriptions are supported for one path segment:
 
 ```csharp
@@ -70,6 +89,8 @@ document.Subscribe("$.player.*", change =>
 - numeric/string scalar values as editable fields
 - `null` as a readonly placeholder
 - registered `JsonUiAction` entries as toolbar or inline buttons
+
+Large documents are guarded by paging and depth limits. `MaxVisibleChildrenPerNode` defaults to `128`, `MaxRenderDepth` defaults to `64`, and `EnableLargeDataPaging` can be disabled when a small trusted document should render in full.
 
 For faster menu prototyping, `UImGuiJsonScreen` renders a lightweight UI schema over the same `JsonDocumentModel`. The schema describes layout and widgets; C# registers command callbacks by id:
 
@@ -100,6 +121,65 @@ var diagnostics = new JsonUiSchemaValidator().Validate(schema, commands);
 var screen = new UImGuiJsonScreen(document, schema, commands);
 screen.Draw();
 ```
+
+Schemas can define reusable `templates` and instantiate them with `type: "include"` or the shorthand `use`. Include nodes can override ordinary node fields, so compact AI-generated schemas can reuse the same control shape with different `label` and `path` values:
+
+```json
+{
+  "templates": {
+    "volumeSlider": { "type": "sliderFloat", "min": 0, "max": 1 }
+  },
+  "root": {
+    "type": "section",
+    "children": [
+      { "use": "volumeSlider", "label": "Music", "path": "$.audio.music" },
+      { "use": "volumeSlider", "label": "SFX", "path": "$.audio.sfx" }
+    ]
+  }
+}
+```
+
+`JsonUiPayloadCommands.RegisterDefaults(commands)` adds common button patterns that are driven only by `payload`:
+
+```json
+[
+  { "type": "button", "label": "+50", "action": "payload.add", "payload": { "path": "$.credits", "amount": 50, "max": 999 } },
+  { "type": "button", "label": "Debug", "action": "payload.set", "payload": { "path": "$.mode", "value": "Debug" } },
+  { "type": "button", "label": "Toggle", "action": "payload.toggle", "payload": { "path": "$.enabled" } },
+  { "type": "button", "label": "Copy", "action": "payload.copy", "payload": { "from": "$.title", "to": "$.debug.lastCommand" } }
+]
+```
+
+The schema widget set now covers the common controls needed for fast runtime tools:
+
+- layout: `section`, `foldout`, `row`, `columns`, `tabs`, `separator`, `space`;
+- fields: `field`, `text`, `inputText`, `inputTextMultiline`, `int`, `float`, `toggle`;
+- numeric controls: `sliderInt`, `sliderFloat`, `dragInt`, `dragFloat`, `progress`;
+- structured controls: `vector2`, `vector3`, `color`, `select`, `radio`;
+- actions: `button`.
+
+`vector2`, `vector3`, and `color` read/write JSON arrays such as `[1, 2, 3]` and `[1, 0.8, 0.2, 1]`; they also read object forms like `{ "x": 1, "y": 2 }` and `{ "r": 1, "g": 0.8, "b": 0.2, "a": 1 }`.
+
+Layout nodes and field nodes support small polish hints: `labelWidth` is inherited by child fields, `spacing` adjusts ImGui item spacing for a subtree, `indent` offsets a subtree, and `wrap` lets `row` and `radio` move overflowing controls to the next line. `width` and `height` can be used on controls that need an explicit size, including buttons and multiline text.
+
+For scene-level fast UI, add `UImGuiJsonScreenBehaviour` to a GameObject. It can read JSON and schema from `TextAsset` references or inline inspector strings, subscribes to the UImGui layout callback, exposes `RegisterCommand(...)`, and shows schema diagnostics in a small companion window.
+
+```csharp
+public sealed class SettingsMenuCommands : MonoBehaviour
+{
+    [SerializeField]
+    private UImGuiJsonScreenBehaviour _screen;
+
+    private void Awake()
+    {
+        _screen.RegisterCommand("applySettings", context => ApplySettings(context.Document, context.Payload));
+    }
+}
+```
+
+Schema parse failures keep the previous valid screen alive. Parsed schemas still render while validator diagnostics are shown, which keeps iteration fast when a button action or optional field is temporarily missing.
+
+The diagnostics window has Validate, Reload All, and Copy buttons. It validates normal widget rules, template references, known action ids, and payload command shapes.
 
 `visibleWhen` and `enabledWhen` accept either a path string (`"$.isVisible"`) or an object condition with `equals`, `notEquals`, `exists`, `truthy`, `gt`, `gte`, `lt`, and `lte`.
 
@@ -155,7 +235,7 @@ var jsonObject = new JsonSerializedObject<MenuState>(
     });
 ```
 
-Current scope is still intentionally small: it does not yet implement schema-aware dropdowns, enum hints, add/remove collection editing, or validation layers.
+Current scope is still intentionally small: it does not yet implement enum reflection hints, add/remove collection editing, or rich Unity object-reference editors.
 
 ## Design notes
 

@@ -18,6 +18,7 @@ namespace DingoJsonUI
         private JToken _root;
 
         public JToken RootToken => _root;
+        public int Version { get; private set; }
 
         public JsonDocumentModel()
         {
@@ -58,8 +59,12 @@ namespace DingoJsonUI
         {
             var previousRoot = _root?.DeepClone();
             _root = token?.DeepClone() ?? JValue.CreateNull();
+            var changed = !JToken.DeepEquals(previousRoot, _root);
 
-            if (!notifyRoot || JToken.DeepEquals(previousRoot, _root))
+            if (changed)
+                Version++;
+
+            if (!notifyRoot || !changed)
                 return;
 
             NotifyAffectedPaths(previousRoot, _root, JsonPath.Root);
@@ -132,6 +137,7 @@ namespace DingoJsonUI
             if (JToken.DeepEquals(previousRoot, _root))
                 return true;
 
+            Version++;
             NotifyAffectedPaths(previousRoot, _root, normalizedPath);
             return true;
         }
