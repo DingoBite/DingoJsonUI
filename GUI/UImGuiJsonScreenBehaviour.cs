@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using ImGuiNET;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 namespace DingoJsonUI.GUI
@@ -198,6 +200,11 @@ namespace DingoJsonUI.GUI
             return _session.LoadJson(json);
         }
 
+        public bool LoadJsonToken(JToken token)
+        {
+            return LoadJson(ToJsonString(token));
+        }
+
         [ContextMenu("Reload Schema")]
         public bool ReloadSchema()
         {
@@ -214,6 +221,11 @@ namespace DingoJsonUI.GUI
                 RebuildScreen();
 
             return result;
+        }
+
+        public bool LoadSchemaToken(JToken token)
+        {
+            return LoadSchemaJson(ToJsonString(token));
         }
 
         public bool LoadSchema(JsonUiSchema schema)
@@ -314,6 +326,13 @@ namespace DingoJsonUI.GUI
         private string GetSchemaSource()
         {
             return _schemaAsset != null ? _schemaAsset.text : string.IsNullOrWhiteSpace(_inlineSchema) ? DefaultSchema : _inlineSchema;
+        }
+
+        private static string ToJsonString(JToken token)
+        {
+            return token == null || token.Type == JTokenType.Null
+                ? null
+                : token.ToString(Formatting.None);
         }
 
         private void DrawDiagnosticsWindow()

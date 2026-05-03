@@ -37,7 +37,7 @@ Runtime tools и prototype menus в Unity часто требуют один и 
 
 | Папка | Ответственность | Основные типы |
 | --- | --- | --- |
-| `Runtime/` | JSON document model, JSONPath helpers, subscriptions, schema model, commands, diagnostics, serialization wrapper | `JsonDocumentModel`, `JsonPath`, `JsonPathSubscription`, `JsonUiSchema`, `JsonUiSession`, `JsonUiCommandRegistry`, `JsonSerializedObject<T>` |
+| `Runtime/` | JSON document model, JSONPath helpers, subscriptions, schema model, fluent schema authoring, commands, diagnostics, serialization wrapper | `JsonDocumentModel`, `JsonPath`, `JsonPathSubscription`, `JsonUiSchema`, `JsonUiSchemaBuilder`, `Ui`, `JsonUiSession`, `JsonUiCommandRegistry`, `JsonSerializedObject<T>` |
 | `GUI/` | UImGui renderers и готовые behaviours | `UImGuiJsonEditor`, `UImGuiJsonScreen`, `UImGuiJsonEditorBehaviour`, `UImGuiJsonScreenBehaviour`, `UImGuiJsonSchemaDiagnosticsWindow` |
 | `Tests/Editor/` | EditMode coverage для document changes, paths, schema validation и serialization behavior | `DingoJsonUI.Tests` |
 | `Examples/` | Sample-сцена, разделённая по фичам | raw editor, schema screen, serialized object inspector, screen behaviour wrapper, feature gallery |
@@ -135,6 +135,57 @@ var session = JsonUi.Session(
 
 var screen = UImGuiJsonUi.Screen(session);
 screen.Draw();
+```
+
+`JToken` и `JObject` поддерживаются как input overloads. Они сериализуются обратно в JSON и затем загружаются через тот же string parser и diagnostics pipeline:
+
+```csharp
+var data = new JObject
+{
+    ["volume"] = 0.75f,
+    ["debug"] = false,
+};
+
+var schemaToken = new JObject
+{
+    ["root"] = new JObject
+    {
+        ["type"] = "section",
+        ["children"] = new JArray
+        {
+            new JObject { ["type"] = "sliderFloat", ["label"] = "Volume", ["path"] = "$.volume", ["min"] = 0, ["max"] = 1 },
+            new JObject { ["type"] = "toggle", ["label"] = "Debug", ["path"] = "$.debug" },
+        },
+    },
+};
+
+var tokenSession = JsonUi.Session(data, schemaToken);
+```
+
+Для C# authoring лучше использовать fluent schema DSL. Он строит `JsonUiSchema` и `JsonUiNode` напрямую, а JSON остаётся форматом обмена:
+
+```csharp
+var schema = Ui.Schema("Settings",
+    Ui.Section(
+        Ui.SliderFloat("Volume", "$.volume", 0f, 1f),
+        Ui.Toggle("Debug", "$.debug"),
+        Ui.Button("Apply", "applySettings")
+            .Payload("source", "settings")
+            .EnabledWhen(Ui.Gte("$.volume", 0.5))));
+```
+
+Builder-форма удобна, когда screen собирается процедурно:
+
+```csharp
+var schema = JsonUiSchemaBuilder.Create("Settings")
+    .Root(root => root.Section()
+        .SliderFloat("Volume", "$.volume", 0f, 1f)
+        .Toggle("Debug", "$.debug")
+        .Button("Apply", "applySettings", new JObject
+        {
+            ["source"] = "settings",
+        }))
+    .Build();
 ```
 
 ## Runtime document model
@@ -360,9 +411,9 @@ Sample scene в `Examples/Sample.unity` разделена по фичам:
 | Sample | Что показывает |
 | --- | --- |
 | `01 Raw JSON Editor` | raw document editing, actions, subscriptions, wildcard paths, large data paging |
-| `02 Schema Screen` | schema-driven UI поверх shared document |
+| `02 Schema Screen` | schema-driven UI поверх shared document, собранный через fluent `Ui` DSL |
 | `03 Serialized Object` | `[Serializable]` object inspection и apply/reload flow |
-| `04 Screen Behaviour` | drop-in `UImGuiJsonScreenBehaviour` setup |
+| `04 Screen Behaviour` | drop-in `UImGuiJsonScreenBehaviour` setup с JSON и schema, собранными через `JObject`/`JArray` tokens |
 | `05 Feature Gallery` | widgets, layout hints, templates, payload commands, conditions, diagnostics, large data, custom serialization delegates |
 
 ## Текущий scope
@@ -374,4 +425,3 @@ Sample scene в `Examples/Sample.unity` разделена по фичам:
 - rich Unity object-reference editors;
 - retained-mode layout или styling за пределами поддержанных schema hints;
 - production-level theming или design-system integration.
-

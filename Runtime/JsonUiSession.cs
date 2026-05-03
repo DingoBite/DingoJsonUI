@@ -75,6 +75,13 @@ namespace DingoJsonUI
             return LoadSchema(nextSchema);
         }
 
+        public bool LoadSchemaToken(JToken token)
+        {
+            return LoadSchemaJson(token == null || token.Type == JTokenType.Null
+                ? null
+                : token.ToString(Newtonsoft.Json.Formatting.None));
+        }
+
         public bool LoadSchema(JsonUiSchema schema)
         {
             if (schema == null)

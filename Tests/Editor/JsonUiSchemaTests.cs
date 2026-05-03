@@ -324,6 +324,114 @@ namespace DingoJsonUI.Tests
         }
 
         [Test]
+        public void TokenOverloads_SerializeThroughJsonPipeline()
+        {
+            var data = new JObject
+            {
+                ["volume"] = 0.75f,
+                ["debug"] = false,
+            };
+            var schemaToken = new JObject
+            {
+                ["root"] = new JObject
+                {
+                    ["type"] = "section",
+                    ["children"] = new JArray
+                    {
+                        new JObject
+                        {
+                            ["type"] = "sliderFloat",
+                            ["label"] = "Volume",
+                            ["path"] = "$.volume",
+                            ["min"] = 0,
+                            ["max"] = 1,
+                        },
+                        new JObject
+                        {
+                            ["type"] = "toggle",
+                            ["label"] = "Debug",
+                            ["path"] = "$.debug",
+                        },
+                    },
+                },
+            };
+
+            var schema = JsonUi.Schema(schemaToken);
+            var session = JsonUi.Session(data, schemaToken);
+
+            Assert.That(schema.Root.SafeChildren, Has.Count.EqualTo(2));
+            Assert.That(schema.Root.SafeChildren[0].Type, Is.EqualTo(JsonUiNodeType.SliderFloat));
+            Assert.That(session.HasErrors, Is.False);
+            Assert.That(session.GetValue("$.volume", 0f), Is.EqualTo(0.75f));
+            Assert.That(session.Schema.Root.SafeChildren[1].Type, Is.EqualTo(JsonUiNodeType.Toggle));
+        }
+
+        [Test]
+        public void LoadSchemaToken_ReturnsDiagnosticsThroughSession()
+        {
+            var session = JsonUi.Session(schemaJson: @"{
+                ""root"": {
+                    ""type"": ""section"",
+                    ""children"": [
+                        { ""type"": ""text"", ""text"": ""ok"" }
+                    ]
+                }
+            }");
+            var previousSchema = session.Schema;
+
+            Assert.That(session.LoadSchemaToken(new JValue("not an object schema")), Is.False);
+            Assert.That(session.Schema, Is.SameAs(previousSchema));
+            Assert.That(session.HasErrors, Is.True);
+            Assert.That(session.Diagnostics[0].SchemaPath, Is.EqualTo(JsonUiSession.SchemaSourceDiagnosticPath));
+        }
+
+        [Test]
+        public void UiDsl_BuildsSchemaWithFactoriesAndFluentOptions()
+        {
+            var schema = Ui.Schema("Settings",
+                Ui.Section(
+                    Ui.SliderFloat("Volume", "$.volume", 0f, 1f),
+                    Ui.Toggle("Debug", "$.debug"),
+                    Ui.Select("Mode", "$.mode", Ui.Option("Fast", "fast"), Ui.Option("Quality", "quality")),
+                    Ui.Button("Apply", "applySettings")
+                        .Payload("source", "settings")
+                        .EnabledWhen(Ui.Gte("$.volume", 0.5))));
+
+            var button = schema.Root.SafeChildren[3];
+
+            Assert.That(schema.Title, Is.EqualTo("Settings"));
+            Assert.That(schema.Root.SafeChildren[0].Type, Is.EqualTo(JsonUiNodeType.SliderFloat));
+            Assert.That(schema.Root.SafeChildren[2].SafeOptions[1].Value.Value<string>(), Is.EqualTo("quality"));
+            Assert.That(button.Action, Is.EqualTo("applySettings"));
+            Assert.That(button.Payload.Value<string>("source"), Is.EqualTo("settings"));
+            Assert.That(button.EnabledWhen.GreaterThanOrEqual, Is.EqualTo(0.5d));
+        }
+
+        [Test]
+        public void SchemaBuilder_BuildsNestedSchema()
+        {
+            var schema = JsonUiSchemaBuilder.Create("Settings")
+                .Template("percent", Ui.SliderFloat("Percent", "$.unused", 0f, 1f))
+                .Root(root => root.Section()
+                    .SliderFloat("Volume", "$.volume", 0f, 1f)
+                    .Toggle("Debug", "$.debug")
+                    .Button("Apply", "applySettings", new JObject
+                    {
+                        ["source"] = "settings",
+                    })
+                    .Foldout("Advanced", foldout => foldout
+                        .InputText("Name", "$.name")
+                        .Int("Retries", "$.retries")))
+                .Build();
+
+            Assert.That(schema.Title, Is.EqualTo("Settings"));
+            Assert.That(schema.Templates, Contains.Key("percent"));
+            Assert.That(schema.Root.SafeChildren, Has.Count.EqualTo(4));
+            Assert.That(schema.Root.SafeChildren[2].Payload.Value<string>("source"), Is.EqualTo("settings"));
+            Assert.That(schema.Root.SafeChildren[3].SafeChildren[1].Type, Is.EqualTo(JsonUiNodeType.Integer));
+        }
+
+        [Test]
         public void CommandRegistry_ExecutesRegisteredCommand()
         {
             var document = new JsonDocumentModel(@"{""clicks"":0}");

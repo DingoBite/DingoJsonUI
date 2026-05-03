@@ -24,6 +24,11 @@ namespace DingoJsonUI
             return JsonUiSchema.FromJson(json);
         }
 
+        public static JsonUiSchema Schema(JToken token)
+        {
+            return JsonUiSchema.FromToken(token);
+        }
+
         public static JsonUiCommandRegistry Commands(bool registerDefaultPayloadCommands = true)
         {
             var commands = new JsonUiCommandRegistry();
@@ -50,6 +55,11 @@ namespace DingoJsonUI
             return session;
         }
 
+        public static JsonUiSession Session(JToken json, JToken schemaToken, Action<JsonUiCommandRegistry> configureCommands = null, JsonUiOptions options = null)
+        {
+            return Session(ToJsonString(json), ToJsonString(schemaToken), configureCommands, options);
+        }
+
         public static IReadOnlyList<JsonUiSchemaDiagnostic> Validate(JsonUiSchema schema, JsonUiCommandRegistry commands = null)
         {
             return new JsonUiSchemaValidator().Validate(schema, commands);
@@ -58,6 +68,13 @@ namespace DingoJsonUI
         public static bool IsValid(JsonUiSchema schema, JsonUiCommandRegistry commands = null)
         {
             return new JsonUiSchemaValidator().IsValid(schema, commands);
+        }
+
+        private static string ToJsonString(JToken token)
+        {
+            return token == null || token.Type == JTokenType.Null
+                ? null
+                : token.ToString(Newtonsoft.Json.Formatting.None);
         }
     }
 }

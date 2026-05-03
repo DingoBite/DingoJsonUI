@@ -37,7 +37,7 @@ It is not a full retained UI framework and not a replacement for Unity UI Toolki
 
 | Folder | Responsibility | Main types |
 | --- | --- | --- |
-| `Runtime/` | JSON document model, JSONPath helpers, subscriptions, schema model, commands, diagnostics, serialization wrapper | `JsonDocumentModel`, `JsonPath`, `JsonPathSubscription`, `JsonUiSchema`, `JsonUiSession`, `JsonUiCommandRegistry`, `JsonSerializedObject<T>` |
+| `Runtime/` | JSON document model, JSONPath helpers, subscriptions, schema model, fluent schema authoring, commands, diagnostics, serialization wrapper | `JsonDocumentModel`, `JsonPath`, `JsonPathSubscription`, `JsonUiSchema`, `JsonUiSchemaBuilder`, `Ui`, `JsonUiSession`, `JsonUiCommandRegistry`, `JsonSerializedObject<T>` |
 | `GUI/` | UImGui renderers and ready-to-drop behaviours | `UImGuiJsonEditor`, `UImGuiJsonScreen`, `UImGuiJsonEditorBehaviour`, `UImGuiJsonScreenBehaviour`, `UImGuiJsonSchemaDiagnosticsWindow` |
 | `Tests/Editor/` | EditMode coverage for document changes, paths, schema validation, and serialization behavior | `DingoJsonUI.Tests` |
 | `Examples/` | Sample scene split by feature | raw editor, schema screen, serialized object inspector, screen behaviour wrapper, feature gallery |
@@ -135,6 +135,57 @@ var session = JsonUi.Session(
 
 var screen = UImGuiJsonUi.Screen(session);
 screen.Draw();
+```
+
+`JToken` and `JObject` are supported as input overloads. They are serialized back to JSON and then loaded through the same string parser and diagnostics pipeline:
+
+```csharp
+var data = new JObject
+{
+    ["volume"] = 0.75f,
+    ["debug"] = false,
+};
+
+var schemaToken = new JObject
+{
+    ["root"] = new JObject
+    {
+        ["type"] = "section",
+        ["children"] = new JArray
+        {
+            new JObject { ["type"] = "sliderFloat", ["label"] = "Volume", ["path"] = "$.volume", ["min"] = 0, ["max"] = 1 },
+            new JObject { ["type"] = "toggle", ["label"] = "Debug", ["path"] = "$.debug" },
+        },
+    },
+};
+
+var tokenSession = JsonUi.Session(data, schemaToken);
+```
+
+For C# authoring, prefer the fluent schema DSL. It builds `JsonUiSchema` and `JsonUiNode` directly, while JSON remains the interchange format:
+
+```csharp
+var schema = Ui.Schema("Settings",
+    Ui.Section(
+        Ui.SliderFloat("Volume", "$.volume", 0f, 1f),
+        Ui.Toggle("Debug", "$.debug"),
+        Ui.Button("Apply", "applySettings")
+            .Payload("source", "settings")
+            .EnabledWhen(Ui.Gte("$.volume", 0.5))));
+```
+
+The builder form is useful when a screen is assembled procedurally:
+
+```csharp
+var schema = JsonUiSchemaBuilder.Create("Settings")
+    .Root(root => root.Section()
+        .SliderFloat("Volume", "$.volume", 0f, 1f)
+        .Toggle("Debug", "$.debug")
+        .Button("Apply", "applySettings", new JObject
+        {
+            ["source"] = "settings",
+        }))
+    .Build();
 ```
 
 ## Runtime document model
@@ -360,9 +411,9 @@ The sample scene in `Examples/Sample.unity` is split by feature:
 | Sample | Shows |
 | --- | --- |
 | `01 Raw JSON Editor` | raw document editing, actions, subscriptions, wildcard paths, large data paging |
-| `02 Schema Screen` | schema-driven UI over a shared document |
+| `02 Schema Screen` | schema-driven UI over a shared document, authored with the fluent `Ui` DSL |
 | `03 Serialized Object` | `[Serializable]` object inspection and apply/reload flow |
-| `04 Screen Behaviour` | drop-in `UImGuiJsonScreenBehaviour` setup |
+| `04 Screen Behaviour` | drop-in `UImGuiJsonScreenBehaviour` setup with `JObject`/`JArray` token-authored JSON and schema |
 | `05 Feature Gallery` | widgets, layout hints, templates, payload commands, conditions, diagnostics, large data, custom serialization delegates |
 
 ## Current scope
@@ -374,4 +425,3 @@ The module is intentionally small. It does not yet provide:
 - rich Unity object-reference editors;
 - retained-mode layout or styling beyond the supported schema hints;
 - production-level theming or design-system integration.
-

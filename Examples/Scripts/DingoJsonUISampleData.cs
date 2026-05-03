@@ -320,6 +320,220 @@ namespace DingoJsonUI.Examples.Scripts
                                           }
                                         }";
 
+        public static JObject CreateBehaviourJsonToken()
+        {
+            return new JObject
+            {
+                ["menu"] = new JObject
+                {
+                    ["title"] = "Behaviour sample",
+                    ["credits"] = 100,
+                    ["mode"] = "Prototype",
+                    ["quality"] = "Balanced",
+                    ["volume"] = 0.65,
+                    ["iterations"] = 3,
+                    ["intensity"] = 0.5,
+                    ["spawn"] = new JArray(2.0, 3.0),
+                    ["position"] = new JArray(0.0, 1.0, 0.0),
+                    ["tint"] = new JArray(0.25, 0.6, 1.0, 1.0),
+                    ["danger"] = false,
+                    ["progress"] = 0.25,
+                    ["notes"] = "Multiline notes are useful for quick AI-generated menu copy.\nEdit this text at runtime.",
+                },
+                ["debug"] = new JObject
+                {
+                    ["lastCommand"] = "none",
+                },
+            };
+        }
+
+        public static JObject CreateBehaviourSchemaToken()
+        {
+            return new JObject
+            {
+                ["title"] = "04 Screen Behaviour",
+                ["root"] = new JObject
+                {
+                    ["type"] = "section",
+                    ["labelWidth"] = 118,
+                    ["spacing"] = 6,
+                    ["children"] = new JArray
+                    {
+                        new JObject
+                        {
+                            ["type"] = "row",
+                            ["spacing"] = 6,
+                            ["wrap"] = true,
+                            ["children"] = new JArray
+                            {
+                                Button("Reset", "resetBehaviourJson"),
+                                Button("+ Credits", "payload.add", new JObject
+                                {
+                                    ["path"] = "$.menu.credits",
+                                    ["amount"] = 50,
+                                    ["max"] = 999,
+                                }),
+                                WithEnabledWhen(Button("Buy Upgrade", "buyUpgrade", new JObject
+                                {
+                                    ["price"] = 75,
+                                }), "$.menu.credits", "gte", 75),
+                            },
+                        },
+                        new JObject
+                        {
+                            ["type"] = "row",
+                            ["spacing"] = 6,
+                            ["wrap"] = true,
+                            ["children"] = new JArray
+                            {
+                                Button("Debug Mode", "payload.set", new JObject
+                                {
+                                    ["path"] = "$.menu.mode",
+                                    ["value"] = "Debug",
+                                }),
+                                Button("Toggle Danger", "payload.toggle", new JObject
+                                {
+                                    ["path"] = "$.menu.danger",
+                                }),
+                                Button("Copy Title", "payload.copy", new JObject
+                                {
+                                    ["from"] = "$.menu.title",
+                                    ["to"] = "$.debug.lastCommand",
+                                }),
+                            },
+                        },
+                        new JObject { ["type"] = "separator" },
+                        new JObject
+                        {
+                            ["type"] = "columns",
+                            ["columns"] = 2,
+                            ["children"] = new JArray
+                            {
+                                new JObject
+                                {
+                                    ["type"] = "section",
+                                    ["label"] = "Menu",
+                                    ["labelWidth"] = 92,
+                                    ["children"] = new JArray
+                                    {
+                                        Field("inputText", "Title", "$.menu.title"),
+                                        new JObject
+                                        {
+                                            ["type"] = "inputTextMultiline",
+                                            ["label"] = "Notes",
+                                            ["path"] = "$.menu.notes",
+                                            ["height"] = 64,
+                                        },
+                                        Select("Mode", "$.menu.mode", ("Prototype", "Prototype"), ("Debug", "Debug"), ("Release", "Release")),
+                                        With(Radio("Quality", "$.menu.quality", ("Fast", "Fast"), ("Balanced", "Balanced"), ("Quality", "Quality")), "wrap", true),
+                                        Field("int", "Credits", "$.menu.credits"),
+                                        Field("toggle", "Danger", "$.menu.danger"),
+                                    },
+                                },
+                                new JObject
+                                {
+                                    ["type"] = "section",
+                                    ["label"] = "Tuning",
+                                    ["labelWidth"] = 92,
+                                    ["children"] = new JArray
+                                    {
+                                        Numeric("dragInt", "Iterations", "$.menu.iterations", step: 1, min: 1, max: 10),
+                                        Numeric("dragFloat", "Intensity", "$.menu.intensity", step: 0.05, min: 0, max: 2),
+                                        Numeric("sliderFloat", "Volume", "$.menu.volume", min: 0, max: 1),
+                                        Numeric("vector2", "Spawn", "$.menu.spawn", step: 0.1),
+                                        Numeric("vector3", "Position", "$.menu.position", step: 0.1),
+                                        Field("color", "Tint", "$.menu.tint"),
+                                        Numeric("progress", "Progress", "$.menu.progress", min: 0, max: 1),
+                                        Field("text", "Last", "$.debug.lastCommand"),
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            };
+
+            static JObject Button(string label, string action, JObject payload = null)
+            {
+                var node = new JObject
+                {
+                    ["type"] = "button",
+                    ["label"] = label,
+                    ["action"] = action,
+                    ["height"] = 24,
+                };
+
+                if (payload != null)
+                    node["payload"] = payload;
+
+                return node;
+            }
+
+            static JObject Field(string type, string label, string path)
+            {
+                return new JObject
+                {
+                    ["type"] = type,
+                    ["label"] = label,
+                    ["path"] = path,
+                };
+            }
+
+            static JObject Numeric(string type, string label, string path, double? step = null, double? min = null, double? max = null)
+            {
+                var node = Field(type, label, path);
+                if (step.HasValue)
+                    node["step"] = step.Value;
+                if (min.HasValue)
+                    node["min"] = min.Value;
+                if (max.HasValue)
+                    node["max"] = max.Value;
+                return node;
+            }
+
+            static JObject Select(string label, string path, params (string Label, string Value)[] options)
+            {
+                return WithOptions(Field("select", label, path), options);
+            }
+
+            static JObject Radio(string label, string path, params (string Label, string Value)[] options)
+            {
+                return WithOptions(Field("radio", label, path), options);
+            }
+
+            static JObject With(JObject node, string property, JToken value)
+            {
+                node[property] = value;
+                return node;
+            }
+
+            static JObject WithEnabledWhen(JObject node, string path, string op, JToken value)
+            {
+                node["enabledWhen"] = new JObject
+                {
+                    ["path"] = path,
+                    [op] = value,
+                };
+                return node;
+            }
+
+            static JObject WithOptions(JObject node, params (string Label, string Value)[] options)
+            {
+                var optionArray = new JArray();
+                for (var i = 0; i < options.Length; i++)
+                {
+                    optionArray.Add(new JObject
+                    {
+                        ["label"] = options[i].Label,
+                        ["value"] = options[i].Value,
+                    });
+                }
+
+                node["options"] = optionArray;
+                return node;
+            }
+        }
+
         public static void LoadGameplayJson(JsonDocumentModel document)
         {
             document.LoadJson(GameplayJson);

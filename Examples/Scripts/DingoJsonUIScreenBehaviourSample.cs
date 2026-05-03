@@ -36,11 +36,11 @@ namespace DingoJsonUI.Examples.Scripts
             _screen.InitialWindowPosition = _initialWindowPosition;
             _screen.InitialWindowSize = _initialWindowSize;
 
-            _screen.LoadJson(DingoJsonUISampleData.BehaviourJson);
+            _screen.LoadJsonToken(DingoJsonUISampleData.CreateBehaviourJsonToken());
             var session = _screen.Session;
             session.Commands.Clear();
             session.RegisterDefaultPayloadCommands();
-            session.RegisterCommand("resetBehaviourJson", _ => session.LoadJson(DingoJsonUISampleData.BehaviourJson));
+            session.RegisterCommand("resetBehaviourJson", _ => session.LoadToken(DingoJsonUISampleData.CreateBehaviourJsonToken()));
             session.RegisterCommand("buyUpgrade", context =>
             {
                 var price = context.Payload?["price"]?.Value<int>() ?? 75;
@@ -54,7 +54,7 @@ namespace DingoJsonUI.Examples.Scripts
                 SetLastCommand(context.Document, $"upgrade -{price}");
             });
 
-            _screen.LoadSchemaJson(DingoJsonUISampleData.BehaviourSchema);
+            _screen.LoadSchemaToken(DingoJsonUISampleData.CreateBehaviourSchemaToken());
         }
 
         private static void SetLastCommand(JsonDocumentModel document, string value)

@@ -68,7 +68,7 @@ namespace DingoJsonUI.Examples.Scripts
 
             EnsureSource();
             RegisterCommands();
-            _screen = new UImGuiJsonScreen(Document, JsonUiSchema.FromJson(DingoJsonUISampleData.FastUiSchema), _commands, "02 Schema Screen");
+            _screen = new UImGuiJsonScreen(Document, CreateSchema(), _commands, "02 Schema Screen");
             _initialized = true;
         }
 
@@ -94,6 +94,57 @@ namespace DingoJsonUI.Examples.Scripts
             _commands.Register("completeQuest", context => DingoJsonUISampleData.CompleteFirstQuest(context.Document));
             _commands.Register("addItem", context => DingoJsonUISampleData.AddGeneratedInventoryItem(context.Document));
             _commands.Register("debugClick", context => DingoJsonUISampleData.IncrementDebugClicks(context.Document));
+        }
+
+        private static JsonUiSchema CreateSchema()
+        {
+            return JsonUiSchemaBuilder.Create("02 Schema Screen")
+                .Template("topToolbar", Ui.Row(
+                    Ui.Button("Reset", "resetJson").Tooltip("Reload sample state."),
+                    Ui.Button("Combat Preset", "combatPreset").Tooltip("Apply several gameplay changes."),
+                    Ui.Button("+ Debug", "debugClick")))
+                .Template("textInput", Ui.InputText(null, null).Width(260))
+                .Template("intSlider", Ui.SliderInt(null, null, 0, 100))
+                .Template("floatSlider", Ui.SliderFloat(null, null, 0, 1))
+                .Template("toggle", Ui.Toggle(null, null))
+                .Template("playerActions", Ui.Row(
+                    Ui.Button("Heal", "healPlayer"),
+                    Ui.Button("Damage", "damagePlayer")
+                        .Payload("amount", 25)
+                        .EnabledWhen(Ui.Gt("$.player.stats.hp", 0)),
+                    Ui.Button("Complete Quest", "completeQuest")
+                        .EnabledWhen(Ui.Eq("$.quests[0].complete", false))))
+                .Template("difficultySelect", Ui.Select(null, null,
+                    Ui.Option("Easy", "Easy"),
+                    Ui.Option("Normal", "Normal"),
+                    Ui.Option("Hard", "Hard")))
+                .Template("debugLine", Ui.Text(null, null))
+                .Root(root => root.Section()
+                    .Include("topToolbar")
+                    .Separator()
+                    .Tabs(tabs => tabs
+                        .Tab("Player", tab => tab
+                            .Add(Ui.Include("textInput").Label("Name").Path("$.player.profile.name"))
+                            .Add(Ui.Include("intSlider").Label("HP").Path("$.player.stats.hp").Max(120))
+                            .Add(Ui.Include("floatSlider").Label("Speed").Path("$.player.stats.speed").Max(15))
+                            .Add(Ui.Include("toggle").Label("Alive").Path("$.player.stats.alive"))
+                            .Include("playerActions"))
+                        .Tab("Inventory", tab => tab
+                            .Field("Potion", "$.inventory[0].label")
+                            .Int("Potion Count", "$.inventory[0].count")
+                            .Toggle("Key Equipped", "$.inventory[1].equipped")
+                            .Button("Add Item", "addItem"))
+                        .Tab("Settings", tab => tab
+                            .Add(Ui.Include("difficultySelect").Label("Difficulty").Path("$.settings.difficulty"))
+                            .Add(Ui.Include("floatSlider").Label("Music").Path("$.settings.musicVolume"))
+                            .Add(Ui.Include("toggle").Label("Show Hints").Path("$.settings.showHints"))
+                            .Add(Ui.Include("textInput").Label("Note").Path("$.settings.nullableNote")))
+                        .Tab("Debug", tab => tab
+                            .Field("Clicks", "$.debug.clicks")
+                            .Add(Ui.Include("debugLine").Label("Last HP").Path("$.debug.lastExactHpChange"))
+                            .Add(Ui.Include("debugLine").Label("Player Wildcard").Path("$.debug.lastPlayerWildcard"))
+                            .Add(Ui.Include("debugLine").Label("Inventory Wildcard").Path("$.debug.lastInventoryWildcard")))))
+                .Build();
         }
 
         private static System.Numerics.Vector2 ToImGuiVector(Vector2 value)

@@ -66,6 +66,13 @@ namespace DingoJsonUI
             };
         }
 
+        public static JsonUiSchema FromToken(JToken token)
+        {
+            return token == null || token.Type == JTokenType.Null
+                ? new JsonUiSchema()
+                : FromJson(token.ToString(Formatting.None));
+        }
+
         public static bool IsTemplateReference(JsonUiNode node)
         {
             if (node == null)
