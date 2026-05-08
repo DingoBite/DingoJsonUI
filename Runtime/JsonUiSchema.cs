@@ -14,6 +14,7 @@ namespace DingoJsonUI
         public const string Columns = "columns";
         public const string Tabs = "tabs";
         public const string Include = "include";
+        public const string List = "list";
         public const string Text = "text";
         public const string Field = "field";
         public const string InputText = "inputText";
@@ -134,6 +135,10 @@ namespace DingoJsonUI
                 VisibleWhen = CloneCondition(source.VisibleWhen),
                 EnabledWhen = CloneCondition(source.EnabledWhen),
                 Payload = source.Payload?.DeepClone(),
+                ItemTemplate = source.ItemTemplate?.DeepClone(),
+                ItemLabelPath = source.ItemLabelPath,
+                AddLabel = source.AddLabel,
+                EmptyText = source.EmptyText,
                 SameLine = source.SameLine,
                 DefaultOpen = source.DefaultOpen,
                 Width = source.Width,
@@ -199,6 +204,18 @@ namespace DingoJsonUI
 
             if (overrides.Payload != null)
                 target.Payload = overrides.Payload.DeepClone();
+
+            if (overrides.ItemTemplate != null)
+                target.ItemTemplate = overrides.ItemTemplate.DeepClone();
+
+            if (overrides.ItemLabelPath != null)
+                target.ItemLabelPath = overrides.ItemLabelPath;
+
+            if (overrides.AddLabel != null)
+                target.AddLabel = overrides.AddLabel;
+
+            if (overrides.EmptyText != null)
+                target.EmptyText = overrides.EmptyText;
 
             if (overrides.SameLine)
                 target.SameLine = true;
@@ -338,6 +355,18 @@ namespace DingoJsonUI
 
         [JsonProperty("payload")]
         public JToken Payload { get; set; }
+
+        [JsonProperty("itemTemplate")]
+        public JToken ItemTemplate { get; set; }
+
+        [JsonProperty("itemLabelPath")]
+        public string ItemLabelPath { get; set; }
+
+        [JsonProperty("addLabel")]
+        public string AddLabel { get; set; }
+
+        [JsonProperty("emptyText")]
+        public string EmptyText { get; set; }
 
         [JsonProperty("sameLine")]
         public bool SameLine { get; set; }

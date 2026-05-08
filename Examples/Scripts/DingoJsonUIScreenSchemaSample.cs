@@ -8,6 +8,13 @@ namespace DingoJsonUI.Examples.Scripts
     [DefaultExecutionOrder(-50)]
     public sealed class DingoJsonUIScreenSchemaSample : MonoBehaviour
     {
+        private enum DifficultyPreset
+        {
+            Easy,
+            Normal,
+            Hard,
+        }
+
         [SerializeField] private DingoJsonUIRawEditorSample _sourceSample;
         [SerializeField] private bool _draw = true;
         [SerializeField] private Vector2 _initialWindowPosition = new(530f, 18f);
@@ -98,6 +105,16 @@ namespace DingoJsonUI.Examples.Scripts
 
         private static JsonUiSchema CreateSchema()
         {
+            var rootPath = Ui.Path;
+            var player = rootPath["player"];
+            var playerStats = player["stats"];
+            var playerProfile = player["profile"];
+            var inventory = rootPath["inventory"];
+            var quests = rootPath["quests"];
+            var settings = rootPath["settings"];
+            var debug = rootPath["debug"];
+            var item = Ui.Item;
+
             return JsonUiSchemaBuilder.Create("02 Schema Screen")
                 .Template("topToolbar", Ui.Row(
                     Ui.Button("Reset", "resetJson").Tooltip("Reload sample state."),
@@ -111,39 +128,47 @@ namespace DingoJsonUI.Examples.Scripts
                     Ui.Button("Heal", "healPlayer"),
                     Ui.Button("Damage", "damagePlayer")
                         .Payload("amount", 25)
-                        .EnabledWhen(Ui.Gt("$.player.stats.hp", 0)),
+                        .EnabledWhen(Ui.Gt(playerStats["hp"], 0)),
                     Ui.Button("Complete Quest", "completeQuest")
-                        .EnabledWhen(Ui.Eq("$.quests[0].complete", false))))
-                .Template("difficultySelect", Ui.Select(null, null,
-                    Ui.Option("Easy", "Easy"),
-                    Ui.Option("Normal", "Normal"),
-                    Ui.Option("Hard", "Hard")))
+                        .EnabledWhen(Ui.Eq(quests[0]["complete"], false))))
+                .Template("difficultySelect", Ui.SelectEnum<DifficultyPreset>(null, null))
                 .Template("debugLine", Ui.Text(null, null))
                 .Root(root => root.Section()
                     .Include("topToolbar")
                     .Separator()
                     .Tabs(tabs => tabs
                         .Tab("Player", tab => tab
-                            .Add(Ui.Include("textInput").Label("Name").Path("$.player.profile.name"))
-                            .Add(Ui.Include("intSlider").Label("HP").Path("$.player.stats.hp").Max(120))
-                            .Add(Ui.Include("floatSlider").Label("Speed").Path("$.player.stats.speed").Max(15))
-                            .Add(Ui.Include("toggle").Label("Alive").Path("$.player.stats.alive"))
+                            .Add(Ui.Include("textInput").Label("Name").Path(playerProfile["name"]))
+                            .Add(Ui.Include("intSlider").Label("HP").Path(playerStats["hp"]).Max(120))
+                            .Add(Ui.Include("floatSlider").Label("Speed").Path(playerStats["speed"]).Max(15))
+                            .Add(Ui.Include("toggle").Label("Alive").Path(playerStats["alive"]))
                             .Include("playerActions"))
                         .Tab("Inventory", tab => tab
-                            .Field("Potion", "$.inventory[0].label")
-                            .Int("Potion Count", "$.inventory[0].count")
-                            .Toggle("Key Equipped", "$.inventory[1].equipped")
-                            .Button("Add Item", "addItem"))
+                            .Add(Ui.List("Inventory", inventory,
+                                    new JObject
+                                    {
+                                        ["id"] = "new-item",
+                                        ["label"] = "New Item",
+                                        ["count"] = 1,
+                                        ["equipped"] = false,
+                                    },
+                                    Ui.InputText("Id", item["id"]),
+                                    Ui.InputText("Label", item["label"]),
+                                    Ui.Int("Count", item["count"]),
+                                    Ui.Toggle("Equipped", item["equipped"]))
+                                .ItemLabelPath(item["label"])
+                                .AddLabel("+ Item")
+                                .EmptyText("No inventory items.")))
                         .Tab("Settings", tab => tab
-                            .Add(Ui.Include("difficultySelect").Label("Difficulty").Path("$.settings.difficulty"))
-                            .Add(Ui.Include("floatSlider").Label("Music").Path("$.settings.musicVolume"))
-                            .Add(Ui.Include("toggle").Label("Show Hints").Path("$.settings.showHints"))
-                            .Add(Ui.Include("textInput").Label("Note").Path("$.settings.nullableNote")))
+                            .Add(Ui.Include("difficultySelect").Label("Difficulty").Path(settings["difficulty"]))
+                            .Add(Ui.Include("floatSlider").Label("Music").Path(settings["musicVolume"]))
+                            .Add(Ui.Include("toggle").Label("Show Hints").Path(settings["showHints"]))
+                            .Add(Ui.Include("textInput").Label("Note").Path(settings["nullableNote"])))
                         .Tab("Debug", tab => tab
-                            .Field("Clicks", "$.debug.clicks")
-                            .Add(Ui.Include("debugLine").Label("Last HP").Path("$.debug.lastExactHpChange"))
-                            .Add(Ui.Include("debugLine").Label("Player Wildcard").Path("$.debug.lastPlayerWildcard"))
-                            .Add(Ui.Include("debugLine").Label("Inventory Wildcard").Path("$.debug.lastInventoryWildcard")))))
+                            .Field("Clicks", debug["clicks"])
+                            .Add(Ui.Include("debugLine").Label("Last HP").Path(debug["lastExactHpChange"]))
+                            .Add(Ui.Include("debugLine").Label("Player Wildcard").Path(debug["lastPlayerWildcard"]))
+                            .Add(Ui.Include("debugLine").Label("Inventory Wildcard").Path(debug["lastInventoryWildcard"])))))
                 .Build();
         }
 

@@ -18,6 +18,7 @@ namespace DingoJsonUI.GUI
         private readonly Dictionary<string, string> _textBuffers = new();
         private readonly HashSet<string> _dirtyTextBuffers = new(StringComparer.Ordinal);
         private readonly Stack<JsonUiLayoutScope> _layoutScopes = new();
+        private readonly Stack<string> _pathScopes = new();
         private readonly HashSet<string> _templateStack = new(StringComparer.Ordinal);
 
         public JsonUiSchema Schema { get; set; }
@@ -74,6 +75,9 @@ namespace DingoJsonUI.GUI
                         break;
                     case JsonUiNodeType.Tabs:
                         DrawTabs(node);
+                        break;
+                    case JsonUiNodeType.List:
+                        DrawList(node);
                         break;
                     case JsonUiNodeType.Foldout:
                         DrawFoldout(node);
@@ -269,13 +273,320 @@ namespace DingoJsonUI.GUI
             ImGui.EndTabBar();
         }
 
+        private void DrawList(JsonUiNode node)
+        {
+            if (!TryGetPath(node, out var path))
+                return;
+
+            var token = GetToken(path);
+            var array = token as JArray;
+            var label = GetLabelText(node);
+            if (!string.IsNullOrWhiteSpace(label))
+            {
+                var countText = array != null ? array.Count.ToString(CultureInfo.InvariantCulture) : "not array";
+                ImGui.TextUnformatted($"{label} [{countText}]");
+            }
+
+            var enabled = IsNodeEnabled(node);
+            if (!enabled)
+                ImGui.BeginDisabled();
+
+            try
+            {
+                if (array == null)
+                {
+                    DrawMissingList(path, token);
+                    return;
+                }
+
+                DrawListToolbar(node, path, array);
+
+                if (array.Count == 0)
+                {
+                    ImGui.TextDisabled(string.IsNullOrWhiteSpace(node.EmptyText) ? "empty" : node.EmptyText);
+                    return;
+                }
+
+                var flags = node.DefaultOpen == true ? ImGuiTreeNodeFlags.DefaultOpen : ImGuiTreeNodeFlags.None;
+                flags |= ImGuiTreeNodeFlags.OpenOnArrow | ImGuiTreeNodeFlags.OpenOnDoubleClick;
+
+                for (var i = 0; i < array.Count; i++)
+                {
+                    if (DrawListItem(node, path, array, i, flags))
+                        return;
+                }
+            }
+            finally
+            {
+                if (!enabled)
+                    ImGui.EndDisabled();
+            }
+        }
+
+        private void DrawMissingList(string path, JToken token)
+        {
+            ImGui.TextDisabled(token == null ? "missing array" : $"expected array, got {token.Type}");
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Create Array"))
+                _document.SetValue(path, new JArray());
+        }
+
+        private void DrawListToolbar(JsonUiNode node, string path, JArray array)
+        {
+            if (ImGui.SmallButton(string.IsNullOrWhiteSpace(node.AddLabel) ? "Add" : node.AddLabel))
+                AddListItem(path, node);
+
+            if (array.Count <= 0)
+                return;
+
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Clear"))
+                _document.SetValue(path, new JArray());
+        }
+
+        private bool DrawListItem(JsonUiNode node, string path, JArray array, int index, ImGuiTreeNodeFlags flags)
+        {
+            ImGui.PushID(index);
+            var open = false;
+            var changed = false;
+            try
+            {
+                var title = FitTextToWidth(GetListItemLabel(node, array[index], index), Math.Max(80f, ImGui.GetContentRegionAvail().X - 260f));
+                open = ImGui.TreeNodeEx($"{title}##item", flags);
+                ImGui.SameLine();
+
+                if (index <= 0)
+                    ImGui.BeginDisabled();
+                if (ImGui.SmallButton("Up"))
+                    changed = MoveListItem(path, array, index, index - 1);
+                if (index <= 0)
+                    ImGui.EndDisabled();
+
+                ImGui.SameLine();
+                if (index >= array.Count - 1)
+                    ImGui.BeginDisabled();
+                if (ImGui.SmallButton("Down"))
+                    changed = MoveListItem(path, array, index, index + 1);
+                if (index >= array.Count - 1)
+                    ImGui.EndDisabled();
+
+                ImGui.SameLine();
+                if (ImGui.SmallButton("Duplicate"))
+                    changed = DuplicateListItem(path, array, index);
+
+                ImGui.SameLine();
+                if (ImGui.SmallButton("Remove"))
+                    changed = RemoveListItem(path, array, index);
+
+                if (open)
+                {
+                    if (!changed)
+                        DrawListItemContent(node, JsonPath.BuildIndexPath(path, index), array[index]);
+
+                    ImGui.TreePop();
+                }
+            }
+            finally
+            {
+                ImGui.PopID();
+            }
+
+            return changed;
+        }
+
+        private void DrawListItemContent(JsonUiNode node, string itemPath, JToken item)
+        {
+            var children = node.SafeChildren;
+            if (children.Count == 0)
+            {
+                ImGui.TextWrapped(FormatToken(item));
+                return;
+            }
+
+            _pathScopes.Push(itemPath);
+            try
+            {
+                for (var i = 0; i < children.Count; i++)
+                    DrawNode(children[i]);
+            }
+            finally
+            {
+                _pathScopes.Pop();
+            }
+        }
+
+        private void AddListItem(string path, JsonUiNode node)
+        {
+            var array = GetToken(path) as JArray ?? new JArray();
+            array.Add(CreateListItem(node));
+            _document.SetValue(path, array);
+        }
+
+        private bool MoveListItem(string path, JArray array, int fromIndex, int toIndex)
+        {
+            if (fromIndex < 0 || fromIndex >= array.Count || toIndex < 0 || toIndex >= array.Count || fromIndex == toIndex)
+                return false;
+
+            var item = array[fromIndex];
+            array.RemoveAt(fromIndex);
+            array.Insert(toIndex, item);
+            _document.SetValue(path, array);
+            return true;
+        }
+
+        private bool DuplicateListItem(string path, JArray array, int index)
+        {
+            if (index < 0 || index >= array.Count)
+                return false;
+
+            array.Insert(index + 1, array[index]?.DeepClone() ?? JValue.CreateNull());
+            _document.SetValue(path, array);
+            return true;
+        }
+
+        private bool RemoveListItem(string path, JArray array, int index)
+        {
+            if (index < 0 || index >= array.Count)
+                return false;
+
+            array.RemoveAt(index);
+            _document.SetValue(path, array);
+            return true;
+        }
+
+        private JToken CreateListItem(JsonUiNode node)
+        {
+            if (node.ItemTemplate != null)
+                return node.ItemTemplate.DeepClone();
+
+            var model = new JsonDocumentModel(new JObject());
+            var wroteDefault = false;
+            AddDefaultListValues(model, node.SafeChildren, ref wroteDefault);
+            return wroteDefault ? model.RootToken.DeepClone() : new JObject();
+        }
+
+        private void AddDefaultListValues(JsonDocumentModel model, IReadOnlyList<JsonUiNode> children, ref bool wroteDefault)
+        {
+            for (var i = 0; i < children.Count; i++)
+            {
+                var child = children[i];
+                if (child == null || JsonUiSchema.IsTemplateReference(child))
+                    continue;
+
+                var type = NormalizeNodeType(child.Type);
+                if (IsRelativeListPath(child.Path) && TryCreateDefaultValue(child, type, out var defaultValue))
+                {
+                    model.SetValue(child.Path, defaultValue);
+                    wroteDefault = true;
+                }
+
+                if (type != JsonUiNodeType.List)
+                    AddDefaultListValues(model, child.SafeChildren, ref wroteDefault);
+            }
+        }
+
+        private static bool TryCreateDefaultValue(JsonUiNode node, string type, out JToken value)
+        {
+            switch (type)
+            {
+                case JsonUiNodeType.InputText:
+                case JsonUiNodeType.InputTextMultiline:
+                    value = new JValue(string.Empty);
+                    return true;
+                case JsonUiNodeType.Integer:
+                case JsonUiNodeType.DragInt:
+                case JsonUiNodeType.SliderInt:
+                    value = new JValue((int)(node.Min ?? 0f));
+                    return true;
+                case JsonUiNodeType.Float:
+                case JsonUiNodeType.DragFloat:
+                case JsonUiNodeType.SliderFloat:
+                case JsonUiNodeType.Progress:
+                    value = new JValue(node.Min ?? 0f);
+                    return true;
+                case JsonUiNodeType.Toggle:
+                    value = new JValue(false);
+                    return true;
+                case JsonUiNodeType.Vector2:
+                    value = ToArray(0f, 0f);
+                    return true;
+                case JsonUiNodeType.Vector3:
+                    value = ToArray(0f, 0f, 0f);
+                    return true;
+                case JsonUiNodeType.Color:
+                    value = ToArray(1f, 1f, 1f, 1f);
+                    return true;
+                case JsonUiNodeType.Select:
+                case JsonUiNodeType.Radio:
+                    value = node.SafeOptions.Count > 0 ? node.SafeOptions[0].Value?.DeepClone() ?? JValue.CreateNull() : JValue.CreateNull();
+                    return true;
+                case JsonUiNodeType.List:
+                    value = new JArray();
+                    return true;
+                case JsonUiNodeType.Field:
+                    value = JValue.CreateNull();
+                    return true;
+                default:
+                    value = null;
+                    return false;
+            }
+        }
+
+        private static bool IsRelativeListPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return false;
+
+            path = path.Trim();
+            return !path.StartsWith(JsonPath.Root, StringComparison.Ordinal) && path[0] != '[';
+        }
+
+        private string GetListItemLabel(JsonUiNode node, JToken item, int index)
+        {
+            var itemLabel = TryGetListItemLabelFromPath(item, node.ItemLabelPath)
+                            ?? TryGetObjectLabel(item, "label")
+                            ?? TryGetObjectLabel(item, "name")
+                            ?? TryGetObjectLabel(item, "id");
+
+            return string.IsNullOrWhiteSpace(itemLabel)
+                ? $"Item {index + 1}"
+                : $"{index + 1}: {itemLabel}";
+        }
+
+        private static string TryGetListItemLabelFromPath(JToken item, string itemLabelPath)
+        {
+            if (item == null || string.IsNullOrWhiteSpace(itemLabelPath))
+                return null;
+
+            try
+            {
+                var token = item.SelectToken(JsonPath.Normalize(itemLabelPath), false);
+                var label = FormatToken(token);
+                return string.IsNullOrWhiteSpace(label) ? null : label;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string TryGetObjectLabel(JToken item, string propertyName)
+        {
+            if (item is not JObject obj || !obj.TryGetValue(propertyName, StringComparison.OrdinalIgnoreCase, out var value))
+                return null;
+
+            var label = FormatToken(value);
+            return string.IsNullOrWhiteSpace(label) ? null : label;
+        }
+
         private void DrawText(JsonUiNode node)
         {
             var text = node.Text;
-            if (string.IsNullOrEmpty(text) && !string.IsNullOrWhiteSpace(node.Path))
-                text = FormatToken(GetToken(node.Path));
+            var hasPath = TryGetPath(node, out var path);
+            if (string.IsNullOrEmpty(text) && hasPath)
+                text = FormatToken(GetToken(path));
 
-            if (!string.IsNullOrWhiteSpace(node.Label) && !string.IsNullOrWhiteSpace(node.Path))
+            if (!string.IsNullOrWhiteSpace(node.Label) && hasPath)
             {
                 var width = BeginValueField(node, MinimumFieldWidth, false);
                 ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + width);
@@ -713,7 +1024,7 @@ namespace DingoJsonUI.GUI
             if (node.Visible == false)
                 return false;
 
-            return node.VisibleWhen == null || node.VisibleWhen.Evaluate(_document);
+            return node.VisibleWhen == null || EvaluateCondition(node.VisibleWhen);
         }
 
         private bool IsNodeEnabled(JsonUiNode node)
@@ -721,7 +1032,33 @@ namespace DingoJsonUI.GUI
             if (node.Enabled == false)
                 return false;
 
-            return node.EnabledWhen == null || node.EnabledWhen.Evaluate(_document);
+            return node.EnabledWhen == null || EvaluateCondition(node.EnabledWhen);
+        }
+
+        private bool EvaluateCondition(JsonUiCondition condition)
+        {
+            if (condition == null)
+                return true;
+
+            var path = ResolvePath(condition.Path);
+            if (string.IsNullOrWhiteSpace(path))
+                return false;
+
+            var scopedCondition = new JsonUiCondition
+            {
+                Path = path,
+                EqualValue = condition.EqualValue,
+                NotEqualValue = condition.NotEqualValue,
+                Exists = condition.Exists,
+                Truthy = condition.Truthy,
+                GreaterThan = condition.GreaterThan,
+                GreaterThanOrEqual = condition.GreaterThanOrEqual,
+                LessThan = condition.LessThan,
+                LessThanOrEqual = condition.LessThanOrEqual,
+                Not = condition.Not,
+            };
+
+            return scopedCondition.Evaluate(_document);
         }
 
         private JsonUiCommandContext CreateCommandContext(JsonUiNode node)
@@ -916,10 +1253,27 @@ namespace DingoJsonUI.GUI
             return string.IsNullOrWhiteSpace(path) ? null : _document.GetToken(path);
         }
 
-        private static bool TryGetPath(JsonUiNode node, out string path)
+        private bool TryGetPath(JsonUiNode node, out string path)
         {
-            path = string.IsNullOrWhiteSpace(node.Path) ? null : JsonPath.Normalize(node.Path);
+            path = ResolvePath(node.Path);
             return path != null;
+        }
+
+        private string ResolvePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return null;
+
+            path = path.Trim();
+            if (_pathScopes.Count == 0 || path.StartsWith(JsonPath.Root, StringComparison.Ordinal))
+                return JsonPath.Normalize(path);
+
+            var scope = JsonPath.Normalize(_pathScopes.Peek());
+            return path[0] switch
+            {
+                '[' or '.' => JsonPath.Normalize(scope + path),
+                _ => JsonPath.Normalize(scope + "." + path),
+            };
         }
 
         private static string FindOptionLabel(JsonUiNode node, JToken current)

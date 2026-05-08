@@ -227,5 +227,207 @@ namespace DingoJsonUI
             diagnostics.Add(new JsonUiSchemaDiagnostic(JsonUiSchemaDiagnosticSeverity.Error, schemaPath, message));
         }
     }
+
+    public readonly struct JsonUiPayloadAction
+    {
+        public JsonUiPayloadAction(string action, JToken payload = null)
+        {
+            Action = action ?? string.Empty;
+            Payload = payload?.DeepClone();
+        }
+
+        public string Action { get; }
+        public JToken Payload { get; }
+    }
+
+    public sealed class JsonUiPayloadBuilder
+    {
+        private readonly JObject _payload = new();
+
+        public JsonUiPayloadBuilder(string action)
+        {
+            if (string.IsNullOrWhiteSpace(action))
+                throw new ArgumentException("Action cannot be null or empty.", nameof(action));
+
+            Action = action;
+        }
+
+        public string Action { get; }
+
+        public JsonUiPayloadBuilder Path(string path)
+        {
+            if (!string.IsNullOrWhiteSpace(path))
+                _payload["path"] = path;
+
+            return this;
+        }
+
+        public JsonUiPayloadBuilder Path(JsonUiPath path)
+        {
+            return Path(path.ToString());
+        }
+
+        public JsonUiPayloadBuilder Value(object value)
+        {
+            return Property("value", value);
+        }
+
+        public JsonUiPayloadBuilder Amount(object amount)
+        {
+            return Property("amount", amount);
+        }
+
+        public JsonUiPayloadBuilder Min(object min)
+        {
+            return Property("min", min);
+        }
+
+        public JsonUiPayloadBuilder Max(object max)
+        {
+            return Property("max", max);
+        }
+
+        public JsonUiPayloadBuilder Clamp(object min = null, object max = null)
+        {
+            if (min != null)
+                Min(min);
+
+            if (max != null)
+                Max(max);
+
+            return this;
+        }
+
+        public JsonUiPayloadBuilder From(string from)
+        {
+            return Property("from", from);
+        }
+
+        public JsonUiPayloadBuilder From(JsonUiPath from)
+        {
+            return From(from.ToString());
+        }
+
+        public JsonUiPayloadBuilder To(string to)
+        {
+            return Property("to", to);
+        }
+
+        public JsonUiPayloadBuilder To(JsonUiPath to)
+        {
+            return To(to.ToString());
+        }
+
+        public JsonUiPayloadBuilder Property(string name, object value)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("Property name cannot be null or empty.", nameof(name));
+
+            _payload[name] = Ui.ToToken(value);
+            return this;
+        }
+
+        public JsonUiPayloadAction Build()
+        {
+            return new JsonUiPayloadAction(Action, _payload);
+        }
+
+        public JObject ToJObject()
+        {
+            return (JObject)_payload.DeepClone();
+        }
+
+        public static implicit operator JsonUiPayloadAction(JsonUiPayloadBuilder builder)
+        {
+            if (builder == null)
+                throw new ArgumentNullException(nameof(builder));
+
+            return builder.Build();
+        }
+    }
+
+    public static class JsonUiPayload
+    {
+        public static JsonUiPayloadAction Command(string action, JToken payload = null)
+        {
+            return new JsonUiPayloadAction(action, payload);
+        }
+
+        public static JsonUiPayloadBuilder Builder(string action)
+        {
+            return new JsonUiPayloadBuilder(action);
+        }
+
+        public static JsonUiPayloadBuilder Set(string path, object value)
+        {
+            return Builder(JsonUiPayloadCommands.Set)
+                .Path(path)
+                .Value(value);
+        }
+
+        public static JsonUiPayloadBuilder Set(JsonUiPath path, object value)
+        {
+            return Set(path.ToString(), value);
+        }
+
+        public static JsonUiPayloadBuilder Set(object value)
+        {
+            return Builder(JsonUiPayloadCommands.Set)
+                .Value(value);
+        }
+
+        public static JsonUiPayloadBuilder Add(string path, object amount = null, object min = null, object max = null)
+        {
+            return Add(amount, min, max)
+                .Path(path);
+        }
+
+        public static JsonUiPayloadBuilder Add(JsonUiPath path, object amount = null, object min = null, object max = null)
+        {
+            return Add(path.ToString(), amount, min, max);
+        }
+
+        public static JsonUiPayloadBuilder Add(object amount = null, object min = null, object max = null)
+        {
+            var builder = Builder(JsonUiPayloadCommands.Add)
+                .Amount(amount ?? 1);
+
+            if (min != null)
+                builder.Min(min);
+
+            if (max != null)
+                builder.Max(max);
+
+            return builder;
+        }
+
+        public static JsonUiPayloadBuilder Toggle(string path)
+        {
+            return Toggle()
+                .Path(path);
+        }
+
+        public static JsonUiPayloadBuilder Toggle(JsonUiPath path)
+        {
+            return Toggle(path.ToString());
+        }
+
+        public static JsonUiPayloadBuilder Toggle()
+        {
+            return Builder(JsonUiPayloadCommands.Toggle);
+        }
+
+        public static JsonUiPayloadBuilder Copy(string from, string to)
+        {
+            return Builder(JsonUiPayloadCommands.Copy)
+                .From(from)
+                .To(to);
+        }
+
+        public static JsonUiPayloadBuilder Copy(JsonUiPath from, JsonUiPath to)
+        {
+            return Copy(from.ToString(), to.ToString());
+        }
+    }
 }
 #endif

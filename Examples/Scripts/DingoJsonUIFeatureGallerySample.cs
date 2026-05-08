@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using DingoJsonUI.GUI;
 using ImGuiNET;
 using Newtonsoft.Json;
@@ -14,6 +15,7 @@ namespace DingoJsonUI.Examples.Scripts
         [SerializeField] private bool _drawLargeDataEditor = true;
         [SerializeField] private bool _drawValidatorDiagnostics = true;
         [SerializeField] private bool _drawCustomSerialization = true;
+        [SerializeField] private bool _drawSchemaPreview = true;
 
         [SerializeField] private Vector2 _featureGalleryPosition = new(24f, 540f);
         [SerializeField] private Vector2 _featureGallerySize = new(490f, 300f);
@@ -23,6 +25,8 @@ namespace DingoJsonUI.Examples.Scripts
         [SerializeField] private Vector2 _largeDataSize = new(500f, 350f);
         [SerializeField] private Vector2 _customPosition = new(1045f, 390f);
         [SerializeField] private Vector2 _customSize = new(500f, 260f);
+        [SerializeField] private Vector2 _schemaPreviewPosition = new(1045f, 670f);
+        [SerializeField] private Vector2 _schemaPreviewSize = new(500f, 250f);
 
         private JsonUiSession _featureSession;
         private UImGuiJsonScreen _featureScreen;
@@ -35,6 +39,7 @@ namespace DingoJsonUI.Examples.Scripts
 
         private CustomMenuState _customState;
         private UImGuiJsonSerializedObjectInspector<CustomMenuState> _customInspector;
+        private JsonUiSchemaReport _schemaPreviewReport;
 
         private void OnEnable()
         {
@@ -53,6 +58,7 @@ namespace DingoJsonUI.Examples.Scripts
             _validatorSession = null;
             _largeDataEditor = null;
             _largeDataDocument = null;
+            _schemaPreviewReport = null;
         }
 
         private void OnLayout(UImGui.UImGui uImGui)
@@ -87,12 +93,20 @@ namespace DingoJsonUI.Examples.Scripts
                 ImGui.SetNextWindowSize(ToImGuiVector(_validatorSize), ImGuiCond.FirstUseEver);
                 _validatorDiagnostics.Draw();
             }
+
+            if (_drawSchemaPreview)
+            {
+                ImGui.SetNextWindowPos(ToImGuiVector(_schemaPreviewPosition), ImGuiCond.FirstUseEver);
+                ImGui.SetNextWindowSize(ToImGuiVector(_schemaPreviewSize), ImGuiCond.FirstUseEver);
+                DrawSchemaPreview();
+            }
         }
 
         private void EnsureInitialized()
         {
             EnsureValidatorSample();
             EnsureFeatureGallery();
+            EnsureSchemaPreviewSample();
             EnsureLargeDataSample();
             EnsureCustomSerializationSample();
         }
@@ -221,6 +235,70 @@ namespace DingoJsonUI.Examples.Scripts
                 var current = context.Document.GetValue(context.Path, 0);
                 context.Document.SetValue(context.Path, new JValue(current + 10));
             });
+        }
+
+        private void EnsureSchemaPreviewSample()
+        {
+            if (_schemaPreviewReport != null)
+                return;
+
+            EnsureFeatureGallery();
+            _schemaPreviewReport = _featureSession.CreateSchemaReport();
+        }
+
+        private void DrawSchemaPreview()
+        {
+            if (ImGui.Begin("09 Schema Preview API"))
+            {
+                if (ImGui.Button("Refresh"))
+                    _schemaPreviewReport = _featureSession.CreateSchemaReport();
+
+                ImGui.SameLine();
+                if (ImGui.Button("Copy"))
+                    ImGui.SetClipboardText(_schemaPreviewReport?.ToText() ?? string.Empty);
+
+                var report = _schemaPreviewReport;
+                if (report == null)
+                {
+                    ImGui.TextUnformatted("No schema report.");
+                    ImGui.End();
+                    return;
+                }
+
+                var statusColor = report.IsValid
+                    ? new System.Numerics.Vector4(0.35f, 0.95f, 0.45f, 1f)
+                    : new System.Numerics.Vector4(1f, 0.35f, 0.25f, 1f);
+
+                ImGui.TextColored(statusColor, $"Valid: {report.IsValid}  Errors: {report.ErrorCount}  Warnings: {report.WarningCount}");
+                ImGui.TextUnformatted($"Nodes: {report.Preview.NodeCount}  Max Depth: {report.Preview.MaxDepth}");
+                ImGui.TextUnformatted($"Paths: {report.Preview.DataPathCount}  Actions: {report.Preview.ActionCount}  Templates: {report.Preview.TemplateCount}");
+                ImGui.Separator();
+
+                DrawStringList("Paths", report.Preview.DataPaths, 18);
+                DrawStringList("Actions", report.Preview.Actions, 12);
+                DrawStringList("Templates", report.Preview.Templates, 12);
+
+                if (report.Diagnostics.Count > 0 && ImGui.CollapsingHeader("Diagnostics"))
+                {
+                    for (var i = 0; i < report.Diagnostics.Count; i++)
+                        ImGui.TextWrapped(report.Diagnostics[i].ToString());
+                }
+            }
+
+            ImGui.End();
+        }
+
+        private static void DrawStringList(string label, IReadOnlyList<string> values, int limit)
+        {
+            if (values == null || values.Count == 0 || !ImGui.CollapsingHeader($"{label} ({values.Count})"))
+                return;
+
+            var count = Math.Min(values.Count, limit);
+            for (var i = 0; i < count; i++)
+                ImGui.TextWrapped(values[i]);
+
+            if (values.Count > count)
+                ImGui.TextDisabled($"+ {values.Count - count} more");
         }
 
         private static JToken SerializeCustomState(CustomMenuState target, JsonSerializer serializer)

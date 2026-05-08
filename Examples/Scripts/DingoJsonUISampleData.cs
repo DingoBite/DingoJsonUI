@@ -349,6 +349,10 @@ namespace DingoJsonUI.Examples.Scripts
 
         public static JObject CreateBehaviourSchemaToken()
         {
+            var rootPath = Ui.Path;
+            var menu = rootPath["menu"];
+            var debug = rootPath["debug"];
+
             return new JObject
             {
                 ["title"] = "04 Screen Behaviour",
@@ -367,16 +371,11 @@ namespace DingoJsonUI.Examples.Scripts
                             ["children"] = new JArray
                             {
                                 Button("Reset", "resetBehaviourJson"),
-                                Button("+ Credits", "payload.add", new JObject
-                                {
-                                    ["path"] = "$.menu.credits",
-                                    ["amount"] = 50,
-                                    ["max"] = 999,
-                                }),
+                                PayloadButton("+ Credits", JsonUiPayload.Add(menu["credits"], 50, max: 999)),
                                 WithEnabledWhen(Button("Buy Upgrade", "buyUpgrade", new JObject
                                 {
                                     ["price"] = 75,
-                                }), "$.menu.credits", "gte", 75),
+                                }), menu["credits"], "gte", 75),
                             },
                         },
                         new JObject
@@ -386,20 +385,9 @@ namespace DingoJsonUI.Examples.Scripts
                             ["wrap"] = true,
                             ["children"] = new JArray
                             {
-                                Button("Debug Mode", "payload.set", new JObject
-                                {
-                                    ["path"] = "$.menu.mode",
-                                    ["value"] = "Debug",
-                                }),
-                                Button("Toggle Danger", "payload.toggle", new JObject
-                                {
-                                    ["path"] = "$.menu.danger",
-                                }),
-                                Button("Copy Title", "payload.copy", new JObject
-                                {
-                                    ["from"] = "$.menu.title",
-                                    ["to"] = "$.debug.lastCommand",
-                                }),
+                                PayloadButton("Debug Mode", JsonUiPayload.Set(menu["mode"], "Debug")),
+                                PayloadButton("Toggle Danger", JsonUiPayload.Toggle(menu["danger"])),
+                                PayloadButton("Copy Title", JsonUiPayload.Copy(menu["title"], debug["lastCommand"])),
                             },
                         },
                         new JObject { ["type"] = "separator" },
@@ -416,18 +404,18 @@ namespace DingoJsonUI.Examples.Scripts
                                     ["labelWidth"] = 92,
                                     ["children"] = new JArray
                                     {
-                                        Field("inputText", "Title", "$.menu.title"),
+                                        Field("inputText", "Title", menu["title"]),
                                         new JObject
                                         {
                                             ["type"] = "inputTextMultiline",
                                             ["label"] = "Notes",
-                                            ["path"] = "$.menu.notes",
+                                            ["path"] = menu["notes"].ToString(),
                                             ["height"] = 64,
                                         },
-                                        Select("Mode", "$.menu.mode", ("Prototype", "Prototype"), ("Debug", "Debug"), ("Release", "Release")),
-                                        With(Radio("Quality", "$.menu.quality", ("Fast", "Fast"), ("Balanced", "Balanced"), ("Quality", "Quality")), "wrap", true),
-                                        Field("int", "Credits", "$.menu.credits"),
-                                        Field("toggle", "Danger", "$.menu.danger"),
+                                        Select("Mode", menu["mode"], ("Prototype", "Prototype"), ("Debug", "Debug"), ("Release", "Release")),
+                                        With(Radio("Quality", menu["quality"], ("Fast", "Fast"), ("Balanced", "Balanced"), ("Quality", "Quality")), "wrap", true),
+                                        Field("int", "Credits", menu["credits"]),
+                                        Field("toggle", "Danger", menu["danger"]),
                                     },
                                 },
                                 new JObject
@@ -437,14 +425,14 @@ namespace DingoJsonUI.Examples.Scripts
                                     ["labelWidth"] = 92,
                                     ["children"] = new JArray
                                     {
-                                        Numeric("dragInt", "Iterations", "$.menu.iterations", step: 1, min: 1, max: 10),
-                                        Numeric("dragFloat", "Intensity", "$.menu.intensity", step: 0.05, min: 0, max: 2),
-                                        Numeric("sliderFloat", "Volume", "$.menu.volume", min: 0, max: 1),
-                                        Numeric("vector2", "Spawn", "$.menu.spawn", step: 0.1),
-                                        Numeric("vector3", "Position", "$.menu.position", step: 0.1),
-                                        Field("color", "Tint", "$.menu.tint"),
-                                        Numeric("progress", "Progress", "$.menu.progress", min: 0, max: 1),
-                                        Field("text", "Last", "$.debug.lastCommand"),
+                                        Numeric("dragInt", "Iterations", menu["iterations"], step: 1, min: 1, max: 10),
+                                        Numeric("dragFloat", "Intensity", menu["intensity"], step: 0.05, min: 0, max: 2),
+                                        Numeric("sliderFloat", "Volume", menu["volume"], min: 0, max: 1),
+                                        Numeric("vector2", "Spawn", menu["spawn"], step: 0.1),
+                                        Numeric("vector3", "Position", menu["position"], step: 0.1),
+                                        Field("color", "Tint", menu["tint"]),
+                                        Numeric("progress", "Progress", menu["progress"], min: 0, max: 1),
+                                        Field("text", "Last", debug["lastCommand"]),
                                     },
                                 },
                             },
@@ -465,6 +453,15 @@ namespace DingoJsonUI.Examples.Scripts
 
                 if (payload != null)
                     node["payload"] = payload;
+
+                return node;
+            }
+
+            static JObject PayloadButton(string label, JsonUiPayloadAction payloadAction)
+            {
+                var node = Button(label, payloadAction.Action);
+                if (payloadAction.Payload != null)
+                    node["payload"] = payloadAction.Payload.DeepClone();
 
                 return node;
             }

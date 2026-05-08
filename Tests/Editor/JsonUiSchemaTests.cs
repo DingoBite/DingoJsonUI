@@ -6,6 +6,16 @@ namespace DingoJsonUI.Tests
 {
     public sealed class JsonUiSchemaTests
     {
+        private enum SampleQuality
+        {
+            Fast,
+            Balanced,
+            VeryHigh,
+
+            [System.Obsolete]
+            LegacyMode,
+        }
+
         [Test]
         public void FromJson_ParsesRootAndOptions()
         {
@@ -386,6 +396,103 @@ namespace DingoJsonUI.Tests
         }
 
         [Test]
+        public void SchemaReport_ReturnsParseDiagnosticsWithoutThrowing()
+        {
+            var report = JsonUi.ValidateSchemaJson("{ bad schema");
+
+            Assert.That(report.Parsed, Is.False);
+            Assert.That(report.IsValid, Is.False);
+            Assert.That(report.HasErrors, Is.True);
+            Assert.That(report.ErrorCount, Is.EqualTo(1));
+            Assert.That(report.Diagnostics[0].SchemaPath, Is.EqualTo(JsonUiSession.SchemaSourceDiagnosticPath));
+            Assert.That(report.Preview.NodeCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void SchemaReport_BuildsPreviewForPathsActionsAndTemplates()
+        {
+            var schema = JsonUiSchemaBuilder.Create("Preview")
+                .Template("counter", Ui.Button("+1", JsonUiPayload.Add(Ui.Path["credits"], 1)))
+                .Root(root => root.Section()
+                    .SliderInt("HP", Ui.Path["player"]["hp"], 0, 100)
+                    .Button("Apply", "custom.apply")
+                    .List("Inventory", Ui.Path["inventory"], list => list
+                        .InputText("Label", Ui.Item["label"]), new JObject
+                        {
+                            ["label"] = "New Item",
+                        })
+                    .Include("counter"))
+                .Build();
+            var commands = JsonUi.Commands();
+            commands.Register("custom.apply", _ => { });
+
+            var report = JsonUi.Preview(schema, commands);
+
+            Assert.That(report.IsValid, Is.True);
+            Assert.That(report.Parsed, Is.True);
+            Assert.That(report.Preview.Title, Is.EqualTo("Preview"));
+            Assert.That(report.Preview.DataPaths, Contains.Item("$.player.hp"));
+            Assert.That(report.Preview.DataPaths, Contains.Item("$.inventory"));
+            Assert.That(report.Preview.DataPaths, Contains.Item("$.credits"));
+            Assert.That(report.Preview.Actions, Contains.Item("custom.apply"));
+            Assert.That(report.Preview.Actions, Contains.Item(JsonUiPayloadCommands.Add));
+            Assert.That(report.Preview.Templates, Contains.Item("counter"));
+            Assert.That(report.Preview.NodeTypeCounts[JsonUiNodeType.Button], Is.GreaterThanOrEqualTo(2));
+            Assert.That(report.ToText(), Does.Contain("Preview"));
+        }
+
+        [Test]
+        public void SchemaReport_TokenFacadeUsesJsonPipeline()
+        {
+            var schemaToken = new JObject
+            {
+                ["title"] = "Token Preview",
+                ["root"] = new JObject
+                {
+                    ["type"] = "section",
+                    ["children"] = new JArray
+                    {
+                        new JObject
+                        {
+                            ["type"] = "sliderFloat",
+                            ["label"] = "Volume",
+                            ["path"] = "$.volume",
+                            ["min"] = 0,
+                            ["max"] = 1,
+                        },
+                    },
+                },
+            };
+
+            var report = JsonUi.ValidateSchemaToken(schemaToken);
+
+            Assert.That(report.Parsed, Is.True);
+            Assert.That(report.IsValid, Is.True);
+            Assert.That(report.Preview.Title, Is.EqualTo("Token Preview"));
+            Assert.That(report.Preview.DataPaths, Contains.Item("$.volume"));
+            Assert.That(report.Preview.NodeTypeCounts[JsonUiNodeType.SliderFloat], Is.EqualTo(1));
+        }
+
+        [Test]
+        public void JsonUiSession_CreatesReportFromCurrentSchemaAndDiagnostics()
+        {
+            var session = JsonUi.Session(json: "{ bad json", schemaJson: @"{
+                ""root"": {
+                    ""type"": ""button"",
+                    ""label"": ""Missing Action""
+                }
+            }");
+
+            var report = session.CreateSchemaReport();
+
+            Assert.That(report.HasErrors, Is.True);
+            Assert.That(report.Diagnostics, Has.Count.EqualTo(session.Diagnostics.Count));
+            Assert.That(report.Preview.NodeCount, Is.EqualTo(1));
+            Assert.That(report.Preview.NodeTypeCounts[JsonUiNodeType.Button], Is.EqualTo(1));
+            Assert.That(report.ToText(), Does.Contain(JsonUiSession.JsonSourceDiagnosticPath));
+        }
+
+        [Test]
         public void UiDsl_BuildsSchemaWithFactoriesAndFluentOptions()
         {
             var schema = Ui.Schema("Settings",
@@ -405,6 +512,27 @@ namespace DingoJsonUI.Tests
             Assert.That(button.Action, Is.EqualTo("applySettings"));
             Assert.That(button.Payload.Value<string>("source"), Is.EqualTo("settings"));
             Assert.That(button.EnabledWhen.GreaterThanOrEqual, Is.EqualTo(0.5d));
+        }
+
+        [Test]
+        public void UiDsl_BuildsEnumOptionsForSelectAndRadio()
+        {
+            var select = Ui.SelectEnum<SampleQuality>("Quality", "$.quality");
+            var radio = Ui.RadioEnum<SampleQuality>(
+                "Quality Id",
+                "$.qualityId",
+                labelSelector: value => $"Quality {value}",
+                valueSelector: value => (int)value,
+                includeObsolete: true);
+
+            Assert.That(select.SafeOptions, Has.Count.EqualTo(3));
+            Assert.That(select.SafeOptions[2].Label, Is.EqualTo("Very High"));
+            Assert.That(select.SafeOptions[2].Value.Value<string>(), Is.EqualTo("VeryHigh"));
+
+            Assert.That(radio.SafeOptions, Has.Count.EqualTo(4));
+            Assert.That(radio.SafeOptions[0].Label, Is.EqualTo("Quality Fast"));
+            Assert.That(radio.SafeOptions[0].Value.Value<int>(), Is.EqualTo(0));
+            Assert.That(radio.SafeOptions[3].Label, Is.EqualTo("Quality LegacyMode"));
         }
 
         [Test]
@@ -429,6 +557,123 @@ namespace DingoJsonUI.Tests
             Assert.That(schema.Root.SafeChildren, Has.Count.EqualTo(4));
             Assert.That(schema.Root.SafeChildren[2].Payload.Value<string>("source"), Is.EqualTo("settings"));
             Assert.That(schema.Root.SafeChildren[3].SafeChildren[1].Type, Is.EqualTo(JsonUiNodeType.Integer));
+        }
+
+        [Test]
+        public void SchemaBuilder_AddsEnumControls()
+        {
+            var schema = JsonUiSchemaBuilder.Create("Enum Settings")
+                .Root(root => root.Section()
+                    .SelectEnum<SampleQuality>("Quality", "$.quality")
+                    .RadioEnum<SampleQuality>("Quality Id", "$.qualityId", valueSelector: value => (int)value))
+                .Build();
+
+            Assert.That(schema.Root.SafeChildren, Has.Count.EqualTo(2));
+            Assert.That(schema.Root.SafeChildren[0].SafeOptions[2].Label, Is.EqualTo("Very High"));
+            Assert.That(schema.Root.SafeChildren[1].SafeOptions[1].Value.Value<int>(), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void FromJson_ParsesListControl()
+        {
+            var schema = JsonUiSchema.FromJson(@"{
+                ""root"": {
+                    ""type"": ""list"",
+                    ""label"": ""Inventory"",
+                    ""path"": ""$.inventory"",
+                    ""itemLabelPath"": ""label"",
+                    ""addLabel"": ""+ Item"",
+                    ""emptyText"": ""No items."",
+                    ""itemTemplate"": { ""id"": ""new-item"", ""label"": ""New Item"", ""count"": 1 },
+                    ""children"": [
+                        { ""type"": ""inputText"", ""label"": ""Label"", ""path"": ""label"" },
+                        { ""type"": ""int"", ""label"": ""Count"", ""path"": ""count"" }
+                    ]
+                }
+            }");
+
+            Assert.That(schema.Root.Type, Is.EqualTo(JsonUiNodeType.List));
+            Assert.That(schema.Root.ItemLabelPath, Is.EqualTo("label"));
+            Assert.That(schema.Root.AddLabel, Is.EqualTo("+ Item"));
+            Assert.That(schema.Root.EmptyText, Is.EqualTo("No items."));
+            Assert.That(schema.Root.ItemTemplate.Value<string>("id"), Is.EqualTo("new-item"));
+            Assert.That(schema.Root.SafeChildren[0].Path, Is.EqualTo("label"));
+
+            var diagnostics = new JsonUiSchemaValidator().Validate(schema);
+            Assert.That(diagnostics, Is.Empty);
+        }
+
+        [Test]
+        public void SchemaBuilder_AddsListControl()
+        {
+            var schema = JsonUiSchemaBuilder.Create("Collections")
+                .Root(root => root.Section()
+                    .List("Inventory", "$.inventory", list => list
+                        .InputText("Id", "id")
+                        .InputText("Label", "label")
+                        .Int("Count", "count")
+                        .Toggle("Equipped", "equipped"), new JObject
+                        {
+                            ["id"] = "new-item",
+                            ["label"] = "New Item",
+                            ["count"] = 1,
+                            ["equipped"] = false,
+                        }))
+                .Build();
+
+            var list = schema.Root.SafeChildren[0];
+            list.ItemLabelPath("label").AddLabel("+ Item").EmptyText("No items.");
+
+            Assert.That(list.Type, Is.EqualTo(JsonUiNodeType.List));
+            Assert.That(list.ItemTemplate.Value<string>("label"), Is.EqualTo("New Item"));
+            Assert.That(list.SafeChildren, Has.Count.EqualTo(4));
+            Assert.That(list.SafeChildren[2].Path, Is.EqualTo("count"));
+            Assert.That(list.ItemLabelPath, Is.EqualTo("label"));
+        }
+
+        [Test]
+        public void JsonUiPath_BuildsAbsoluteAndRelativePaths()
+        {
+            var root = JsonUiPath.Root;
+            var item = JsonUiPath.RelativeRoot;
+
+            Assert.That(root["player"]["stats"]["hp"].ToString(), Is.EqualTo("$.player.stats.hp"));
+            Assert.That(root["inventory"][0]["label"].ToString(), Is.EqualTo("$.inventory[0].label"));
+            Assert.That(root["special keys"]["dash-name"].ToString(), Is.EqualTo("$['special keys']['dash-name']"));
+            Assert.That(root["inventory"].AnyIndex()["id"].ToString(), Is.EqualTo("$.inventory[*].id"));
+
+            Assert.That(item["label"].ToString(), Is.EqualTo("label"));
+            Assert.That(item["special keys"]["dash-name"].ToString(), Is.EqualTo("['special keys']['dash-name']"));
+            Assert.That(item[0]["id"].ToString(), Is.EqualTo("[0].id"));
+            Assert.That(JsonUiPath.Relative("stats.hp").ToString(), Is.EqualTo("stats.hp"));
+            Assert.That(JsonUiPath.From("player.stats.hp").ToString(), Is.EqualTo("$.player.stats.hp"));
+        }
+
+        [Test]
+        public void JsonUiPath_WorksWithDslAndTypedPayloads()
+        {
+            var playerHp = Ui.Path["player"]["stats"]["hp"];
+            var inventory = Ui.Path["inventory"];
+            var itemLabel = Ui.Item["label"];
+
+            var schema = Ui.Schema("Path Authoring",
+                Ui.Section(
+                    Ui.Int("HP", playerHp),
+                    Ui.List("Inventory", inventory,
+                            Ui.InputText("Label", itemLabel))
+                        .ItemLabelPath(itemLabel),
+                    Ui.Button("+10", JsonUiPayload.Add(playerHp, 10, max: 120))));
+
+            var commands = new JsonUiCommandRegistry();
+            JsonUiPayloadCommands.RegisterDefaults(commands);
+
+            var diagnostics = new JsonUiSchemaValidator().Validate(schema, commands);
+
+            Assert.That(diagnostics, Is.Empty);
+            Assert.That(schema.Root.SafeChildren[0].Path, Is.EqualTo("$.player.stats.hp"));
+            Assert.That(schema.Root.SafeChildren[1].Path, Is.EqualTo("$.inventory"));
+            Assert.That(schema.Root.SafeChildren[1].SafeChildren[0].Path, Is.EqualTo("label"));
+            Assert.That(schema.Root.SafeChildren[2].Payload.Value<string>("path"), Is.EqualTo("$.player.stats.hp"));
         }
 
         [Test]
@@ -490,6 +735,55 @@ namespace DingoJsonUI.Tests
             Assert.That(document.GetValue<bool>("$.enabled"), Is.True);
             Assert.That(document.GetValue<string>("$.target"), Is.EqualTo("copied"));
             Assert.That(document.GetValue<string>("$.mode"), Is.EqualTo("Debug"));
+        }
+
+        [Test]
+        public void TypedPayloadBuilders_CreateValidatedButtons()
+        {
+            var schema = Ui.Schema("Payloads",
+                Ui.Section(
+                    Ui.Button("+50", JsonUiPayload.Add("$.credits", 50, max: 125)),
+                    Ui.Button("Debug", JsonUiPayload.Set("$.mode", "Debug")),
+                    Ui.Button("Toggle", JsonUiPayload.Toggle("$.enabled")),
+                    Ui.Button("Copy", JsonUiPayload.Copy("$.source", "$.target")),
+                    Ui.Button("+2 Current Path", JsonUiPayload.Add(2)).Path("$.credits")));
+
+            var commands = new JsonUiCommandRegistry();
+            JsonUiPayloadCommands.RegisterDefaults(commands);
+
+            var diagnostics = new JsonUiSchemaValidator().Validate(schema, commands);
+
+            Assert.That(diagnostics, Is.Empty);
+            Assert.That(schema.Root.SafeChildren[0].Action, Is.EqualTo(JsonUiPayloadCommands.Add));
+            Assert.That(schema.Root.SafeChildren[0].Payload.Value<int>("amount"), Is.EqualTo(50));
+            Assert.That(schema.Root.SafeChildren[0].Payload.Value<int>("max"), Is.EqualTo(125));
+            Assert.That(schema.Root.SafeChildren[1].Payload.Value<string>("value"), Is.EqualTo("Debug"));
+            Assert.That(schema.Root.SafeChildren[4].Path, Is.EqualTo("$.credits"));
+            Assert.That(schema.Root.SafeChildren[4].Payload.Value<int>("amount"), Is.EqualTo(2));
+        }
+
+        [Test]
+        public void TypedPayloadBuilders_ExecuteDefaultCommands()
+        {
+            var document = new JsonDocumentModel(@"{""credits"":100,""enabled"":false,""source"":""copied"",""target"":""""}");
+            var commands = new JsonUiCommandRegistry();
+            JsonUiPayloadCommands.RegisterDefaults(commands);
+
+            Execute(JsonUiPayload.Add("$.credits", 50, max: 125));
+            Execute(JsonUiPayload.Toggle("$.enabled"));
+            Execute(JsonUiPayload.Copy("$.source", "$.target"));
+            Execute(JsonUiPayload.Set("$.mode", "Debug"));
+
+            Assert.That(document.GetValue<int>("$.credits"), Is.EqualTo(125));
+            Assert.That(document.GetValue<bool>("$.enabled"), Is.True);
+            Assert.That(document.GetValue<string>("$.target"), Is.EqualTo("copied"));
+            Assert.That(document.GetValue<string>("$.mode"), Is.EqualTo("Debug"));
+
+            void Execute(JsonUiPayloadAction payloadAction)
+            {
+                Assert.That(commands.TryGet(payloadAction.Action, out var command), Is.True);
+                command.Execute(new JsonUiCommandContext(document, new JsonUiNode(), payloadAction.Action, null, payloadAction.Payload));
+            }
         }
 
         [Test]

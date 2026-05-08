@@ -1,5 +1,6 @@
 #if NEWTONSOFT_EXISTS
 using System;
+using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -85,6 +86,11 @@ namespace DingoJsonUI
         {
             return new JsonUiContainerBuilder(Ui.Tabs());
         }
+
+        public JsonUiContainerBuilder List(string label, string path, JToken itemTemplate = null)
+        {
+            return new JsonUiContainerBuilder(Ui.List(label, path).ItemTemplate(itemTemplate));
+        }
     }
 
     public sealed class JsonUiContainerBuilder
@@ -146,6 +152,13 @@ namespace DingoJsonUI
         public JsonUiContainerBuilder Tabs(Action<JsonUiContainerBuilder> configure)
         {
             var child = new JsonUiContainerBuilder(Ui.Tabs());
+            configure?.Invoke(child);
+            return Add(child.Node);
+        }
+
+        public JsonUiContainerBuilder List(string label, string path, Action<JsonUiContainerBuilder> configure, JToken itemTemplate = null)
+        {
+            var child = new JsonUiContainerBuilder(Ui.List(label, path).ItemTemplate(itemTemplate));
             configure?.Invoke(child);
             return Add(child.Node);
         }
@@ -252,9 +265,29 @@ namespace DingoJsonUI
             return Add(Ui.Select(label, path, options));
         }
 
+        public JsonUiContainerBuilder SelectEnum<TEnum>(
+            string label,
+            string path,
+            Func<TEnum, string> labelSelector = null,
+            Func<TEnum, object> valueSelector = null,
+            bool includeObsolete = false) where TEnum : struct, Enum
+        {
+            return Add(Ui.SelectEnum(label, path, labelSelector, valueSelector, includeObsolete));
+        }
+
         public JsonUiContainerBuilder Radio(string label, string path, params JsonUiOption[] options)
         {
             return Add(Ui.Radio(label, path, options));
+        }
+
+        public JsonUiContainerBuilder RadioEnum<TEnum>(
+            string label,
+            string path,
+            Func<TEnum, string> labelSelector = null,
+            Func<TEnum, object> valueSelector = null,
+            bool includeObsolete = false) where TEnum : struct, Enum
+        {
+            return Add(Ui.RadioEnum(label, path, labelSelector, valueSelector, includeObsolete));
         }
 
         public JsonUiContainerBuilder Progress(string label, string path, float min = 0f, float max = 1f)
@@ -267,6 +300,11 @@ namespace DingoJsonUI
             return Add(Ui.Button(label, action, payload));
         }
 
+        public JsonUiContainerBuilder Button(string label, JsonUiPayloadAction payloadAction)
+        {
+            return Add(Ui.Button(label, payloadAction));
+        }
+
         public static implicit operator JsonUiNode(JsonUiContainerBuilder builder)
         {
             return builder?.Node;
@@ -275,6 +313,9 @@ namespace DingoJsonUI
 
     public static class Ui
     {
+        public static JsonUiPath Path => JsonUiPath.Root;
+        public static JsonUiPath Item => JsonUiPath.RelativeRoot;
+
         public static JsonUiSchema Schema(string title, JsonUiNode root)
         {
             return new JsonUiSchema
@@ -328,6 +369,16 @@ namespace DingoJsonUI
         public static JsonUiNode Tab(string label, params JsonUiNode[] children)
         {
             return Node(JsonUiNodeType.Section, label, children: children);
+        }
+
+        public static JsonUiNode List(string label, string path, params JsonUiNode[] children)
+        {
+            return Node(JsonUiNodeType.List, label, path, children);
+        }
+
+        public static JsonUiNode List(string label, string path, JToken itemTemplate, params JsonUiNode[] children)
+        {
+            return List(label, path, children).ItemTemplate(itemTemplate);
         }
 
         public static JsonUiNode Include(string template)
@@ -425,14 +476,39 @@ namespace DingoJsonUI
             return Node(JsonUiNodeType.Select, label, path).Options(options);
         }
 
+        public static JsonUiNode SelectEnum<TEnum>(
+            string label,
+            string path,
+            Func<TEnum, string> labelSelector = null,
+            Func<TEnum, object> valueSelector = null,
+            bool includeObsolete = false) where TEnum : struct, Enum
+        {
+            return Select(label, path, EnumOptions(labelSelector, valueSelector, includeObsolete));
+        }
+
         public static JsonUiNode Radio(string label, string path, params JsonUiOption[] options)
         {
             return Node(JsonUiNodeType.Radio, label, path).Options(options);
         }
 
+        public static JsonUiNode RadioEnum<TEnum>(
+            string label,
+            string path,
+            Func<TEnum, string> labelSelector = null,
+            Func<TEnum, object> valueSelector = null,
+            bool includeObsolete = false) where TEnum : struct, Enum
+        {
+            return Radio(label, path, EnumOptions(labelSelector, valueSelector, includeObsolete));
+        }
+
         public static JsonUiNode Button(string label, string action, JToken payload = null)
         {
             return Node(JsonUiNodeType.Button, label).Action(action).Payload(payload);
+        }
+
+        public static JsonUiNode Button(string label, JsonUiPayloadAction payloadAction)
+        {
+            return Button(label, payloadAction.Action, payloadAction.Payload);
         }
 
         public static JsonUiNode Progress(string label, string path, float min = 0f, float max = 1f)
@@ -447,6 +523,30 @@ namespace DingoJsonUI
                 Label = label,
                 Value = ToToken(value),
             };
+        }
+
+        public static JsonUiOption[] EnumOptions<TEnum>(
+            Func<TEnum, string> labelSelector = null,
+            Func<TEnum, object> valueSelector = null,
+            bool includeObsolete = false) where TEnum : struct, Enum
+        {
+            var values = Enum.GetValues(typeof(TEnum));
+            var options = new System.Collections.Generic.List<JsonUiOption>(values.Length);
+
+            for (var i = 0; i < values.Length; i++)
+            {
+                var value = (TEnum)values.GetValue(i);
+                if (!includeObsolete && IsObsoleteEnumValue(value))
+                    continue;
+
+                options.Add(new JsonUiOption
+                {
+                    Label = labelSelector?.Invoke(value) ?? FormatEnumLabel(value.ToString()),
+                    Value = ToToken(valueSelector?.Invoke(value) ?? value.ToString()),
+                });
+            }
+
+            return options.ToArray();
         }
 
         public static JsonUiCondition Condition(string path)
@@ -505,6 +605,36 @@ namespace DingoJsonUI
         private static JsonUiNode Numeric(string type, string label, string path, float? min, float? max)
         {
             return Node(type, label, path).Min(min).Max(max);
+        }
+
+        private static bool IsObsoleteEnumValue<TEnum>(TEnum value) where TEnum : struct, Enum
+        {
+            var field = typeof(TEnum).GetField(value.ToString(), BindingFlags.Public | BindingFlags.Static);
+            return field != null && Attribute.IsDefined(field, typeof(ObsoleteAttribute), inherit: false);
+        }
+
+        private static string FormatEnumLabel(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return string.Empty;
+
+            name = name.Replace('_', ' ');
+            var builder = new System.Text.StringBuilder(name.Length + 8);
+            for (var i = 0; i < name.Length; i++)
+            {
+                var current = name[i];
+                if (i > 0 && current != ' ' && char.IsUpper(current))
+                {
+                    var previous = name[i - 1];
+                    var nextIsLower = i + 1 < name.Length && char.IsLower(name[i + 1]);
+                    if (previous != ' ' && (char.IsLower(previous) || char.IsDigit(previous) || nextIsLower))
+                        builder.Append(' ');
+                }
+
+                builder.Append(current);
+            }
+
+            return builder.ToString();
         }
 
         private static System.Collections.Generic.List<JsonUiNode> CreateChildren(JsonUiNode[] children)
@@ -607,6 +737,37 @@ namespace DingoJsonUI
             }
 
             payload[key] = Ui.ToToken(value);
+            return node;
+        }
+
+        public static JsonUiNode PayloadAction(this JsonUiNode node, JsonUiPayloadAction payloadAction)
+        {
+            node.Action = payloadAction.Action;
+            node.Payload = payloadAction.Payload?.DeepClone();
+            return node;
+        }
+
+        public static JsonUiNode ItemTemplate(this JsonUiNode node, JToken itemTemplate)
+        {
+            node.ItemTemplate = itemTemplate?.DeepClone();
+            return node;
+        }
+
+        public static JsonUiNode ItemLabelPath(this JsonUiNode node, string itemLabelPath)
+        {
+            node.ItemLabelPath = itemLabelPath;
+            return node;
+        }
+
+        public static JsonUiNode AddLabel(this JsonUiNode node, string addLabel)
+        {
+            node.AddLabel = addLabel;
+            return node;
+        }
+
+        public static JsonUiNode EmptyText(this JsonUiNode node, string emptyText)
+        {
+            node.EmptyText = emptyText;
             return node;
         }
 

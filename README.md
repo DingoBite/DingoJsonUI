@@ -29,7 +29,7 @@ It is not a full retained UI framework and not a replacement for Unity UI Toolki
 - The raw editor works immediately for arbitrary `JObject`, `JArray`, scalar, and `null` values.
 - The schema renderer supports practical menu widgets: tabs, rows, columns, sliders, toggles, vectors, colors, selects, radio groups, progress bars, and buttons.
 - Command callbacks are registered by id, while common button behavior can be driven purely by payload data.
-- Schema diagnostics keep malformed generated UI from failing silently.
+- Schema diagnostics and preview reports keep malformed generated UI from failing silently.
 - Large JSON documents are guarded by paging, scroll tuning, depth limits, and object property-name caching.
 - `JsonSerializedObject<T>` can inspect Unity-style serializable objects, with delegate hooks for custom serialization.
 
@@ -37,7 +37,7 @@ It is not a full retained UI framework and not a replacement for Unity UI Toolki
 
 | Folder | Responsibility | Main types |
 | --- | --- | --- |
-| `Runtime/` | JSON document model, JSONPath helpers, subscriptions, schema model, fluent schema authoring, commands, diagnostics, serialization wrapper | `JsonDocumentModel`, `JsonPath`, `JsonPathSubscription`, `JsonUiSchema`, `JsonUiSchemaBuilder`, `Ui`, `JsonUiSession`, `JsonUiCommandRegistry`, `JsonSerializedObject<T>` |
+| `Runtime/` | JSON document model, JSONPath helpers, subscriptions, schema model, fluent schema authoring, commands, diagnostics, schema preview reports, serialization wrapper | `JsonDocumentModel`, `JsonPath`, `JsonPathSubscription`, `JsonUiSchema`, `JsonUiSchemaBuilder`, `Ui`, `JsonUiSession`, `JsonUiSchemaReport`, `JsonUiCommandRegistry`, `JsonSerializedObject<T>` |
 | `GUI/` | UImGui renderers and ready-to-drop behaviours | `UImGuiJsonEditor`, `UImGuiJsonScreen`, `UImGuiJsonEditorBehaviour`, `UImGuiJsonScreenBehaviour`, `UImGuiJsonSchemaDiagnosticsWindow` |
 | `Tests/Editor/` | EditMode coverage for document changes, paths, schema validation, and serialization behavior | `DingoJsonUI.Tests` |
 | `Examples/` | Sample scene split by feature | raw editor, schema screen, serialized object inspector, screen behaviour wrapper, feature gallery |
@@ -169,10 +169,31 @@ var schema = Ui.Schema("Settings",
     Ui.Section(
         Ui.SliderFloat("Volume", "$.volume", 0f, 1f),
         Ui.Toggle("Debug", "$.debug"),
+        Ui.SelectEnum<Difficulty>("Difficulty", "$.difficulty"),
         Ui.Button("Apply", "applySettings")
             .Payload("source", "settings")
             .EnabledWhen(Ui.Gte("$.volume", 0.5))));
 ```
+
+`SelectEnum<TEnum>` and `RadioEnum<TEnum>` build options from enum values. By default, option values are enum names as strings, labels are nicified (`VeryHard` -> `Very Hard`), and `[Obsolete]` members are skipped. Use `labelSelector`, `valueSelector`, or `includeObsolete` when a dev UI needs a different shape.
+
+Use `JsonUiPath`/`Ui.Path` when paths get longer than one property:
+
+```csharp
+var hp = Ui.Path["player"]["stats"]["hp"];
+var inventory = Ui.Path["inventory"];
+var item = Ui.Item;
+
+var schema = Ui.Schema("Settings",
+    Ui.Section(
+        Ui.Int("HP", hp),
+        Ui.List("Inventory", inventory,
+                Ui.InputText("Label", item["label"]))
+            .ItemLabelPath(item["label"]),
+        Ui.Button("+10 HP", JsonUiPayload.Add(hp, 10, max: 120))));
+```
+
+`Ui.Path` creates absolute JSONPath (`$.player.stats.hp`). `Ui.Item` creates relative paths for list item templates (`label`, `stats.hp`). The type converts back to `string`, so existing APIs still accept it.
 
 The builder form is useful when a screen is assembled procedurally:
 
@@ -336,6 +357,45 @@ Include nodes can override ordinary node fields, so generated schemas can reuse 
 
 `JsonUi.Session(...)` registers these default payload commands unless `JsonUiOptions.RegisterDefaultPayloadCommands` is set to `false`.
 
+For C# authored schemas, use typed payload builders instead of hand-writing payload objects:
+
+```csharp
+Ui.Row(
+    Ui.Button("+50", JsonUiPayload.Add("$.credits", 50, max: 999)),
+    Ui.Button("Debug", JsonUiPayload.Set("$.mode", "Debug")),
+    Ui.Button("Toggle", JsonUiPayload.Toggle("$.enabled")),
+    Ui.Button("Copy", JsonUiPayload.Copy("$.title", "$.debug.lastCommand")),
+    Ui.Button("+1 Current Path", JsonUiPayload.Add(1)).Path("$.credits"));
+```
+
+The builders still serialize to the same `action` + `payload` shape, so JSON, `JObject`, and fluent schemas stay interchangeable.
+
+## Schema preview and validation API
+
+Use `JsonUiSchemaReport` when generated or hand-authored schemas should be checked before rendering. It wraps parse diagnostics, validator diagnostics, and a compact preview index of controls, data paths, actions, templates, and type counts.
+
+```csharp
+var commands = JsonUi.Commands();
+commands.Register("applySettings", context => ApplySettings(context.Document, context.Payload));
+
+var report = JsonUi.ValidateSchemaJson(schemaJson, commands);
+if (!report.IsValid)
+    Debug.LogWarning(report.ToText());
+
+foreach (var path in report.Preview.DataPaths)
+    Debug.Log($"Schema touches {path}");
+```
+
+The same API is available for fluent schemas and tokens:
+
+```csharp
+JsonUiSchemaReport fluentReport = JsonUi.Preview(schema, commands);
+JsonUiSchemaReport tokenReport = JsonUi.ValidateSchemaToken(schemaToken, commands);
+JsonUiSchemaReport sessionReport = session.CreateSchemaReport();
+```
+
+`FromJson` and the `JsonUi.ValidateSchemaJson(...)` facade do not throw for malformed schema JSON; parse failures become diagnostics at `$.schema`.
+
 ## Conditions and diagnostics
 
 `visibleWhen` and `enabledWhen` accept either a path string or an object condition:
@@ -414,7 +474,7 @@ The sample scene in `Examples/Sample.unity` is split by feature:
 | `02 Schema Screen` | schema-driven UI over a shared document, authored with the fluent `Ui` DSL |
 | `03 Serialized Object` | `[Serializable]` object inspection and apply/reload flow |
 | `04 Screen Behaviour` | drop-in `UImGuiJsonScreenBehaviour` setup with `JObject`/`JArray` token-authored JSON and schema |
-| `05 Feature Gallery` | widgets, layout hints, templates, payload commands, conditions, diagnostics, large data, custom serialization delegates |
+| `05 Feature Gallery` | widgets, layout hints, templates, payload commands, conditions, diagnostics, schema preview reports, large data, custom serialization delegates |
 
 ## Current scope
 

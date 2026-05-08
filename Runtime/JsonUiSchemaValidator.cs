@@ -40,6 +40,7 @@ namespace DingoJsonUI
             JsonUiNodeType.Columns,
             JsonUiNodeType.Tabs,
             JsonUiNodeType.Include,
+            JsonUiNodeType.List,
             JsonUiNodeType.Text,
             JsonUiNodeType.Field,
             JsonUiNodeType.InputText,
@@ -65,6 +66,7 @@ namespace DingoJsonUI
         private static readonly HashSet<string> PathRequiredTypes = new(StringComparer.Ordinal)
         {
             JsonUiNodeType.Field,
+            JsonUiNodeType.List,
             JsonUiNodeType.InputText,
             JsonUiNodeType.InputTextMultiline,
             JsonUiNodeType.Integer,
@@ -232,6 +234,9 @@ namespace DingoJsonUI
 
             if ((type == JsonUiNodeType.Select || type == JsonUiNodeType.Radio) && node.SafeOptions.Count == 0)
                 diagnostics.Add(Warning(schemaPath, $"{type} has no options."));
+
+            if (type == JsonUiNodeType.List && !string.IsNullOrWhiteSpace(node.ItemLabelPath))
+                ValidateJsonPath(node.ItemLabelPath, schemaPath, "itemLabelPath", diagnostics);
 
             if ((type == JsonUiNodeType.SliderInt || type == JsonUiNodeType.SliderFloat || type == JsonUiNodeType.DragInt || type == JsonUiNodeType.DragFloat || type == JsonUiNodeType.Vector2 || type == JsonUiNodeType.Vector3 || type == JsonUiNodeType.Progress)
                 && node.Min.HasValue

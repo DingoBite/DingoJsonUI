@@ -103,6 +103,11 @@ namespace DingoJsonUI
             return !HasErrors;
         }
 
+        public JsonUiSchemaReport CreateSchemaReport()
+        {
+            return JsonUiSchemaReport.Create(Schema, Commands, Diagnostics);
+        }
+
         public JsonUiCommand RegisterCommand(string id, Action<JsonUiCommandContext> callback)
         {
             var command = Commands.Register(id, callback);

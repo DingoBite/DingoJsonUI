@@ -65,6 +65,36 @@ namespace DingoJsonUI
             return new JsonUiSchemaValidator().Validate(schema, commands);
         }
 
+        public static JsonUiSchemaReport ValidateSchema(JsonUiSchema schema, JsonUiCommandRegistry commands = null)
+        {
+            return JsonUiSchemaReport.Create(schema, commands);
+        }
+
+        public static JsonUiSchemaReport ValidateSchemaJson(string schemaJson, JsonUiCommandRegistry commands = null)
+        {
+            return JsonUiSchemaReport.FromJson(schemaJson, commands);
+        }
+
+        public static JsonUiSchemaReport ValidateSchemaToken(JToken schemaToken, JsonUiCommandRegistry commands = null)
+        {
+            return JsonUiSchemaReport.FromToken(schemaToken, commands);
+        }
+
+        public static JsonUiSchemaReport Preview(JsonUiSchema schema, JsonUiCommandRegistry commands = null)
+        {
+            return ValidateSchema(schema, commands);
+        }
+
+        public static JsonUiSchemaReport PreviewSchemaJson(string schemaJson, JsonUiCommandRegistry commands = null)
+        {
+            return ValidateSchemaJson(schemaJson, commands);
+        }
+
+        public static JsonUiSchemaReport PreviewSchemaToken(JToken schemaToken, JsonUiCommandRegistry commands = null)
+        {
+            return ValidateSchemaToken(schemaToken, commands);
+        }
+
         public static bool IsValid(JsonUiSchema schema, JsonUiCommandRegistry commands = null)
         {
             return new JsonUiSchemaValidator().IsValid(schema, commands);

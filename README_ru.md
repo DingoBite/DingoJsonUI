@@ -29,7 +29,7 @@ Runtime tools и prototype menus в Unity часто требуют один и 
 - Raw editor сразу работает с произвольными `JObject`, `JArray`, scalar и `null` значениями.
 - Schema renderer поддерживает практичные menu widgets: tabs, rows, columns, sliders, toggles, vectors, colors, selects, radio groups, progress bars и buttons.
 - Command callbacks регистрируются по id, а типовые button patterns могут полностью управляться через payload.
-- Schema diagnostics защищают generated UI от тихих ошибок.
+- Schema diagnostics и preview reports защищают generated UI от тихих ошибок.
 - Большие JSON-документы защищены paging-ом, настройкой scroll speed, depth limits и кешем имён свойств объектов.
 - `JsonSerializedObject<T>` умеет инспектировать Unity-style serializable objects и поддерживает delegates для custom serialization.
 
@@ -37,7 +37,7 @@ Runtime tools и prototype menus в Unity часто требуют один и 
 
 | Папка | Ответственность | Основные типы |
 | --- | --- | --- |
-| `Runtime/` | JSON document model, JSONPath helpers, subscriptions, schema model, fluent schema authoring, commands, diagnostics, serialization wrapper | `JsonDocumentModel`, `JsonPath`, `JsonPathSubscription`, `JsonUiSchema`, `JsonUiSchemaBuilder`, `Ui`, `JsonUiSession`, `JsonUiCommandRegistry`, `JsonSerializedObject<T>` |
+| `Runtime/` | JSON document model, JSONPath helpers, subscriptions, schema model, fluent schema authoring, commands, diagnostics, schema preview reports, serialization wrapper | `JsonDocumentModel`, `JsonPath`, `JsonPathSubscription`, `JsonUiSchema`, `JsonUiSchemaBuilder`, `Ui`, `JsonUiSession`, `JsonUiSchemaReport`, `JsonUiCommandRegistry`, `JsonSerializedObject<T>` |
 | `GUI/` | UImGui renderers и готовые behaviours | `UImGuiJsonEditor`, `UImGuiJsonScreen`, `UImGuiJsonEditorBehaviour`, `UImGuiJsonScreenBehaviour`, `UImGuiJsonSchemaDiagnosticsWindow` |
 | `Tests/Editor/` | EditMode coverage для document changes, paths, schema validation и serialization behavior | `DingoJsonUI.Tests` |
 | `Examples/` | Sample-сцена, разделённая по фичам | raw editor, schema screen, serialized object inspector, screen behaviour wrapper, feature gallery |
@@ -169,10 +169,31 @@ var schema = Ui.Schema("Settings",
     Ui.Section(
         Ui.SliderFloat("Volume", "$.volume", 0f, 1f),
         Ui.Toggle("Debug", "$.debug"),
+        Ui.SelectEnum<Difficulty>("Difficulty", "$.difficulty"),
         Ui.Button("Apply", "applySettings")
             .Payload("source", "settings")
             .EnabledWhen(Ui.Gte("$.volume", 0.5))));
 ```
+
+`SelectEnum<TEnum>` и `RadioEnum<TEnum>` строят options из enum values. По умолчанию значения options - строковые имена enum, labels приводятся к читаемому виду (`VeryHard` -> `Very Hard`), а `[Obsolete]` members пропускаются. Для другого формата есть `labelSelector`, `valueSelector` и `includeObsolete`.
+
+Для длинных paths используй `JsonUiPath`/`Ui.Path`:
+
+```csharp
+var hp = Ui.Path["player"]["stats"]["hp"];
+var inventory = Ui.Path["inventory"];
+var item = Ui.Item;
+
+var schema = Ui.Schema("Settings",
+    Ui.Section(
+        Ui.Int("HP", hp),
+        Ui.List("Inventory", inventory,
+                Ui.InputText("Label", item["label"]))
+            .ItemLabelPath(item["label"]),
+        Ui.Button("+10 HP", JsonUiPayload.Add(hp, 10, max: 120))));
+```
+
+`Ui.Path` создаёт absolute JSONPath (`$.player.stats.hp`). `Ui.Item` создаёт relative paths для list item templates (`label`, `stats.hp`). Тип конвертируется обратно в `string`, поэтому старые APIs продолжают работать.
 
 Builder-форма удобна, когда screen собирается процедурно:
 
@@ -336,6 +357,45 @@ Include nodes могут переопределять обычные поля no
 
 `JsonUi.Session(...)` регистрирует эти default payload commands, если `JsonUiOptions.RegisterDefaultPayloadCommands` не выключен.
 
+Для C#-схем можно использовать typed payload builders вместо ручного `JObject`:
+
+```csharp
+Ui.Row(
+    Ui.Button("+50", JsonUiPayload.Add("$.credits", 50, max: 999)),
+    Ui.Button("Debug", JsonUiPayload.Set("$.mode", "Debug")),
+    Ui.Button("Toggle", JsonUiPayload.Toggle("$.enabled")),
+    Ui.Button("Copy", JsonUiPayload.Copy("$.title", "$.debug.lastCommand")),
+    Ui.Button("+1 Current Path", JsonUiPayload.Add(1)).Path("$.credits"));
+```
+
+Builders всё равно сериализуются в тот же формат `action` + `payload`, поэтому JSON, `JObject` и fluent schemas остаются взаимозаменяемыми.
+
+## Schema preview и validation API
+
+Используйте `JsonUiSchemaReport`, когда generated или hand-authored schema надо проверить до рендера. Report объединяет parse diagnostics, validator diagnostics и компактный preview-index по controls, data paths, actions, templates и type counts.
+
+```csharp
+var commands = JsonUi.Commands();
+commands.Register("applySettings", context => ApplySettings(context.Document, context.Payload));
+
+var report = JsonUi.ValidateSchemaJson(schemaJson, commands);
+if (!report.IsValid)
+    Debug.LogWarning(report.ToText());
+
+foreach (var path in report.Preview.DataPaths)
+    Debug.Log($"Schema touches {path}");
+```
+
+Тот же API работает для fluent schemas и tokens:
+
+```csharp
+JsonUiSchemaReport fluentReport = JsonUi.Preview(schema, commands);
+JsonUiSchemaReport tokenReport = JsonUi.ValidateSchemaToken(schemaToken, commands);
+JsonUiSchemaReport sessionReport = session.CreateSchemaReport();
+```
+
+`FromJson` и facade `JsonUi.ValidateSchemaJson(...)` не бросают исключение на битом schema JSON; parse failures превращаются в diagnostics по `$.schema`.
+
 ## Conditions и diagnostics
 
 `visibleWhen` и `enabledWhen` принимают path string или object condition:
@@ -414,7 +474,7 @@ Sample scene в `Examples/Sample.unity` разделена по фичам:
 | `02 Schema Screen` | schema-driven UI поверх shared document, собранный через fluent `Ui` DSL |
 | `03 Serialized Object` | `[Serializable]` object inspection и apply/reload flow |
 | `04 Screen Behaviour` | drop-in `UImGuiJsonScreenBehaviour` setup с JSON и schema, собранными через `JObject`/`JArray` tokens |
-| `05 Feature Gallery` | widgets, layout hints, templates, payload commands, conditions, diagnostics, large data, custom serialization delegates |
+| `05 Feature Gallery` | widgets, layout hints, templates, payload commands, conditions, diagnostics, schema preview reports, large data, custom serialization delegates |
 
 ## Текущий scope
 
