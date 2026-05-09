@@ -9,7 +9,7 @@ using UnityEditor;
 
 namespace DingoJsonUI.GUI
 {
-    internal static class JsonUiPathPicker
+    public static class JsonUiPathPicker
     {
         public static string OpenFile(string title, string directory, string extension)
         {
