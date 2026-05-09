@@ -97,6 +97,12 @@ namespace DingoJsonUI.GUI
                     case JsonUiNodeType.InputTextMultiline:
                         DrawMultilineStringField(node);
                         break;
+                    case JsonUiNodeType.FilePicker:
+                        DrawPathPicker(node, false);
+                        break;
+                    case JsonUiNodeType.FolderPicker:
+                        DrawPathPicker(node, true);
+                        break;
                     case JsonUiNodeType.Integer:
                         DrawIntegerField(node);
                         break;
@@ -491,6 +497,8 @@ namespace DingoJsonUI.GUI
             {
                 case JsonUiNodeType.InputText:
                 case JsonUiNodeType.InputTextMultiline:
+                case JsonUiNodeType.FilePicker:
+                case JsonUiNodeType.FolderPicker:
                     value = new JValue(string.Empty);
                     return true;
                 case JsonUiNodeType.Integer:
@@ -688,6 +696,57 @@ namespace DingoJsonUI.GUI
             UpdateTextBufferState(path, buffer, current);
 
             if (!IsNodeEnabled(node))
+                ImGui.EndDisabled();
+        }
+
+        private void DrawPathPicker(JsonUiNode node, bool folder)
+        {
+            if (!TryGetPath(node, out var path))
+                return;
+
+            var fullWidth = BeginValueField(node, MinimumFieldWidth, false);
+            var current = _document.GetValue<string>(path) ?? string.Empty;
+            var buffer = GetBuffer(path, current);
+            var enabled = IsNodeEnabled(node);
+
+            if (!enabled)
+                ImGui.BeginDisabled();
+
+            var buttonLabel = string.IsNullOrWhiteSpace(node.ButtonLabel)
+                ? folder ? "Folder..." : "File..."
+                : node.ButtonLabel;
+            var style = ImGui.GetStyle();
+            var buttonWidth = ImGui.CalcTextSize(buttonLabel).X + style.FramePadding.X * 2f;
+            var inputWidth = Math.Max(MinimumFieldWidth, fullWidth - buttonWidth - style.ItemInnerSpacing.X);
+
+            ImGui.SetNextItemWidth(inputWidth);
+            if (ImGui.InputText("##value", ref buffer, 4096))
+            {
+                StoreEditedBuffer(path, buffer);
+                _document.SetValue(path, new JValue(buffer));
+                current = buffer;
+            }
+
+            UpdateTextBufferState(path, buffer, current);
+
+            ImGui.SameLine(0f, style.ItemInnerSpacing.X);
+            if (ImGui.Button(buttonLabel) && enabled)
+            {
+                var directory = ResolvePickerDirectory(node, current);
+                var title = node.DialogTitle;
+                var selected = folder
+                    ? JsonUiPathPicker.OpenFolder(title, directory)
+                    : JsonUiPathPicker.OpenFile(title, directory, node.Extension);
+
+                if (!string.IsNullOrWhiteSpace(selected))
+                {
+                    _document.SetValue(path, new JValue(selected));
+                    _textBuffers[path] = selected;
+                    _dirtyTextBuffers.Remove(path);
+                }
+            }
+
+            if (!enabled)
                 ImGui.EndDisabled();
         }
 
@@ -1274,6 +1333,39 @@ namespace DingoJsonUI.GUI
                 '[' or '.' => JsonPath.Normalize(scope + path),
                 _ => JsonPath.Normalize(scope + "." + path),
             };
+        }
+
+        private string ResolvePickerDirectory(JsonUiNode node, string currentValue)
+        {
+            if (!string.IsNullOrWhiteSpace(node.DirectoryPath))
+            {
+                var directoryPath = ResolvePath(node.DirectoryPath);
+                var directoryValue = _document.GetValue<string>(directoryPath);
+                if (!string.IsNullOrWhiteSpace(directoryValue))
+                    return directoryValue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(node.Directory))
+                return node.Directory;
+
+            if (!string.IsNullOrWhiteSpace(currentValue))
+            {
+                try
+                {
+                    return folderExists(currentValue) ? currentValue : System.IO.Path.GetDirectoryName(currentValue);
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            return null;
+
+            static bool folderExists(string path)
+            {
+                return !string.IsNullOrWhiteSpace(path) && System.IO.Directory.Exists(path);
+            }
         }
 
         private static string FindOptionLabel(JsonUiNode node, JToken current)

@@ -19,6 +19,8 @@ namespace DingoJsonUI
         public const string Field = "field";
         public const string InputText = "inputText";
         public const string InputTextMultiline = "inputTextMultiline";
+        public const string FilePicker = "filePicker";
+        public const string FolderPicker = "folderPicker";
         public const string Integer = "int";
         public const string Float = "float";
         public const string DragInt = "dragInt";
@@ -139,6 +141,11 @@ namespace DingoJsonUI
                 ItemLabelPath = source.ItemLabelPath,
                 AddLabel = source.AddLabel,
                 EmptyText = source.EmptyText,
+                DialogTitle = source.DialogTitle,
+                Directory = source.Directory,
+                DirectoryPath = source.DirectoryPath,
+                Extension = source.Extension,
+                ButtonLabel = source.ButtonLabel,
                 SameLine = source.SameLine,
                 DefaultOpen = source.DefaultOpen,
                 Width = source.Width,
@@ -216,6 +223,21 @@ namespace DingoJsonUI
 
             if (overrides.EmptyText != null)
                 target.EmptyText = overrides.EmptyText;
+
+            if (overrides.DialogTitle != null)
+                target.DialogTitle = overrides.DialogTitle;
+
+            if (overrides.Directory != null)
+                target.Directory = overrides.Directory;
+
+            if (overrides.DirectoryPath != null)
+                target.DirectoryPath = overrides.DirectoryPath;
+
+            if (overrides.Extension != null)
+                target.Extension = overrides.Extension;
+
+            if (overrides.ButtonLabel != null)
+                target.ButtonLabel = overrides.ButtonLabel;
 
             if (overrides.SameLine)
                 target.SameLine = true;
@@ -367,6 +389,21 @@ namespace DingoJsonUI
 
         [JsonProperty("emptyText")]
         public string EmptyText { get; set; }
+
+        [JsonProperty("dialogTitle")]
+        public string DialogTitle { get; set; }
+
+        [JsonProperty("directory")]
+        public string Directory { get; set; }
+
+        [JsonProperty("directoryPath")]
+        public string DirectoryPath { get; set; }
+
+        [JsonProperty("extension")]
+        public string Extension { get; set; }
+
+        [JsonProperty("buttonLabel")]
+        public string ButtonLabel { get; set; }
 
         [JsonProperty("sameLine")]
         public bool SameLine { get; set; }

@@ -210,6 +210,16 @@ namespace DingoJsonUI
             return Add(Ui.InputTextMultiline(label, path, height));
         }
 
+        public JsonUiContainerBuilder FilePicker(string label, string path, string extension = null, string dialogTitle = null)
+        {
+            return Add(Ui.FilePicker(label, path, extension, dialogTitle));
+        }
+
+        public JsonUiContainerBuilder FolderPicker(string label, string path, string dialogTitle = null)
+        {
+            return Add(Ui.FolderPicker(label, path, dialogTitle));
+        }
+
         public JsonUiContainerBuilder Int(string label, string path)
         {
             return Add(Ui.Int(label, path));
@@ -419,6 +429,19 @@ namespace DingoJsonUI
         public static JsonUiNode InputTextMultiline(string label, string path, float height = 64f)
         {
             return Node(JsonUiNodeType.InputTextMultiline, label, path).Height(height);
+        }
+
+        public static JsonUiNode FilePicker(string label, string path, string extension = null, string dialogTitle = null)
+        {
+            return Node(JsonUiNodeType.FilePicker, label, path)
+                .Extension(extension)
+                .DialogTitle(dialogTitle);
+        }
+
+        public static JsonUiNode FolderPicker(string label, string path, string dialogTitle = null)
+        {
+            return Node(JsonUiNodeType.FolderPicker, label, path)
+                .DialogTitle(dialogTitle);
         }
 
         public static JsonUiNode Int(string label, string path)
@@ -768,6 +791,36 @@ namespace DingoJsonUI
         public static JsonUiNode EmptyText(this JsonUiNode node, string emptyText)
         {
             node.EmptyText = emptyText;
+            return node;
+        }
+
+        public static JsonUiNode DialogTitle(this JsonUiNode node, string dialogTitle)
+        {
+            node.DialogTitle = dialogTitle;
+            return node;
+        }
+
+        public static JsonUiNode Directory(this JsonUiNode node, string directory)
+        {
+            node.Directory = directory;
+            return node;
+        }
+
+        public static JsonUiNode DirectoryPath(this JsonUiNode node, string directoryPath)
+        {
+            node.DirectoryPath = directoryPath;
+            return node;
+        }
+
+        public static JsonUiNode Extension(this JsonUiNode node, string extension)
+        {
+            node.Extension = extension;
+            return node;
+        }
+
+        public static JsonUiNode ButtonLabel(this JsonUiNode node, string buttonLabel)
+        {
+            node.ButtonLabel = buttonLabel;
             return node;
         }
 
