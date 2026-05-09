@@ -60,12 +60,19 @@ namespace DingoJsonUI.GUI
                 return;
             }
 
+            DrawInside();
+            ImGui.End();
+        }
+
+        public void DrawInside()
+        {
+            if (_document == null)
+                return;
+
             ApplyScrollWheelAcceleration();
             DrawToolbar();
             ImGui.Separator();
             DrawToken(JsonPath.Root, "root", _document.RootToken, true, 0);
-
-            ImGui.End();
         }
 
         private void DrawToolbar()

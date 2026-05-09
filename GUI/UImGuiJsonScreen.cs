@@ -42,9 +42,14 @@ namespace DingoJsonUI.GUI
                 return;
             }
 
+            DrawInside();
+            ImGui.End();
+        }
+
+        public void DrawInside()
+        {
             ApplyScrollWheelAcceleration();
             DrawNode(Schema.Root ?? new JsonUiNode());
-            ImGui.End();
         }
 
         private void DrawNode(JsonUiNode node)

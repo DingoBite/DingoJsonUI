@@ -47,6 +47,14 @@ namespace DingoJsonUI.GUI
                 ApplyDocumentToTarget();
         }
 
+        public void DrawInside()
+        {
+            _editor.DrawInside();
+
+            if (AutoApplyOnChange && _dirty)
+                ApplyDocumentToTarget();
+        }
+
         public void ReloadFromTarget(bool notifyRoot = true)
         {
             _dirty = false;
