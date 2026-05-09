@@ -9,7 +9,7 @@ namespace DingoJsonUI.GUI
 {
     public sealed class UImGuiJsonScreen
     {
-        private const float DefaultScrollWheelPixelsPerStep = 280f;
+        private const float DefaultScrollWheelPixelsPerStep = 1400f;
         private const float DefaultLabelColumnWidth = 150f;
         private const float MinimumLabelColumnWidth = 72f;
         private const float MinimumFieldWidth = 80f;

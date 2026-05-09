@@ -25,7 +25,7 @@ namespace DingoJsonUI.GUI
         private const float TypeColumnOffset = 140f;
         private const float ValueColumnOffset = 230f;
         private const float MinimumValueWidth = 80f;
-        private const float DefaultScrollWheelPixelsPerStep = 280f;
+        private const float DefaultScrollWheelPixelsPerStep = 1400f;
 
         private readonly JsonDocumentModel _document;
         private readonly Dictionary<string, string> _textBuffers = new();
