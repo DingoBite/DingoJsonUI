@@ -15,6 +15,8 @@ namespace DingoJsonUI.GUI
         public JsonSerializedObject<T> SerializedObject => _serializedObject;
         public JsonDocumentModel Document => _serializedObject.Document;
         public JsonUiActionCollection Actions => _editor.Actions;
+        public int AppliedVersion { get; private set; }
+        public bool IsDirty => _dirty;
         public string WindowTitle
         {
             get => _editor.WindowTitle;
@@ -63,9 +65,12 @@ namespace DingoJsonUI.GUI
 
         public bool ApplyDocumentToTarget()
         {
+            var wasDirty = _dirty;
             _dirty = false;
             var applied = _serializedObject.TryApplyDocumentToTarget(out var exception);
             LastApplyException = exception;
+            if (applied && wasDirty)
+                AppliedVersion++;
 
             if (!applied)
                 Debug.LogException(exception);
