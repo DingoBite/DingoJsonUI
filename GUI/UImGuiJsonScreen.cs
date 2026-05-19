@@ -977,6 +977,7 @@ namespace DingoJsonUI.GUI
 
             if (ImGui.BeginCombo("##value", preview))
             {
+                ApplyScrollWheelAcceleration();
                 var options = node.SafeOptions;
                 for (var i = 0; i < options.Count; i++)
                 {
