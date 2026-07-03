@@ -43,6 +43,23 @@ namespace DingoJsonUI.GUI
 #endif
         }
 
+        public static string SaveFile(string title, string directory, string defaultName, string extension)
+        {
+#if UNITY_EDITOR
+            var path = EditorUtility.SaveFilePanel(
+                string.IsNullOrWhiteSpace(title) ? "Save file" : title,
+                NormalizeDirectory(directory),
+                string.IsNullOrWhiteSpace(defaultName) ? "untitled" : defaultName,
+                ToUnityEditorExtension(extension));
+            return string.IsNullOrWhiteSpace(path) ? null : path;
+#elif UNITY_STANDALONE_WIN
+            return WindowsFileDialog.SaveFile(title, directory, defaultName, extension);
+#else
+            Debug.LogWarning("DingoJsonUI save file picker is implemented for Unity Editor and Windows standalone builds.");
+            return null;
+#endif
+        }
+
         private static string NormalizeDirectory(string directory)
         {
             if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
@@ -82,6 +99,67 @@ namespace DingoJsonUI.GUI
             public static string OpenFolder(string title, string directory)
             {
                 return Open(title, directory, null, pickFolders: true);
+            }
+
+            public static string SaveFile(string title, string directory, string defaultName, string extension)
+            {
+                IFileSaveDialog dialog = null;
+                IShellItem resultItem = null;
+                IShellItem defaultFolder = null;
+
+                try
+                {
+                    dialog = (IFileSaveDialog)(object)new FileSaveDialog();
+                    dialog.GetOptions(out var options);
+                    options |= FileOpenOptions.ForceFileSystem | FileOpenOptions.PathMustExist | FileOpenOptions.NoChangeDirectory | FileOpenOptions.OverwritePrompt;
+                    dialog.SetOptions(options);
+
+                    if (!string.IsNullOrWhiteSpace(title))
+                    {
+                        dialog.SetTitle(title);
+                    }
+
+                    ConfigureFileTypes(dialog, extension);
+
+                    if (!string.IsNullOrWhiteSpace(defaultName))
+                    {
+                        dialog.SetFileName(defaultName);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
+                    {
+                        var shellItemGuid = typeof(IShellItem).GUID;
+                        SHCreateItemFromParsingName(directory, IntPtr.Zero, ref shellItemGuid, out defaultFolder);
+                        if (defaultFolder != null)
+                        {
+                            dialog.SetDefaultFolder(defaultFolder);
+                        }
+                    }
+
+                    var hr = dialog.Show(IntPtr.Zero);
+                    if (hr == HResultCancelled)
+                    {
+                        return null;
+                    }
+                    if (hr < 0)
+                    {
+                        Marshal.ThrowExceptionForHR(hr);
+                    }
+
+                    dialog.GetResult(out resultItem);
+                    return GetShellItemPath(resultItem);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"DingoJsonUI save picker failed: {e.Message}");
+                    return null;
+                }
+                finally
+                {
+                    ReleaseComObject(resultItem);
+                    ReleaseComObject(defaultFolder);
+                    ReleaseComObject(dialog);
+                }
             }
 
             private static string Open(string title, string directory, string extension, bool pickFolders)
@@ -158,6 +236,30 @@ namespace DingoJsonUI.GUI
                 dialog.SetDefaultExtension(extensions[0]);
             }
 
+            private static void ConfigureFileTypes(IFileSaveDialog dialog, string extension)
+            {
+                var extensions = SplitExtensions(extension);
+                if (extensions.Length == 0)
+                    return;
+
+                var specs = new COMDLG_FILTERSPEC[2];
+                var filter = string.Join(";", Array.ConvertAll(extensions, ext => "*." + ext));
+                specs[0] = new COMDLG_FILTERSPEC
+                {
+                    pszName = string.Join(", ", Array.ConvertAll(extensions, ext => "." + ext.ToUpperInvariant())),
+                    pszSpec = filter,
+                };
+                specs[1] = new COMDLG_FILTERSPEC
+                {
+                    pszName = "All files",
+                    pszSpec = "*.*",
+                };
+
+                dialog.SetFileTypes((uint)specs.Length, specs);
+                dialog.SetFileTypeIndex(1);
+                dialog.SetDefaultExtension(extensions[0]);
+            }
+
             private static string GetShellItemPath(IShellItem item)
             {
                 if (item == null)
@@ -197,6 +299,12 @@ namespace DingoJsonUI.GUI
             }
 
             [ComImport]
+            [Guid("C0B4E2F3-BA21-4773-8DBA-335EC946EB8B")]
+            private sealed class FileSaveDialog
+            {
+            }
+
+            [ComImport]
             [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
             [Guid("42f85136-db7e-439c-85f1-e4075d135fc8")]
             private interface IFileOpenDialog
@@ -232,6 +340,43 @@ namespace DingoJsonUI.GUI
 
             [ComImport]
             [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+            [Guid("84bccd23-5fde-4cdb-aea4-af64b83d78ab")]
+            private interface IFileSaveDialog
+            {
+                [PreserveSig]
+                int Show(IntPtr owner);
+                void SetFileTypes(uint fileTypesCount, [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 0)] COMDLG_FILTERSPEC[] filterSpec);
+                void SetFileTypeIndex(uint fileTypeIndex);
+                void GetFileTypeIndex(out uint fileTypeIndex);
+                void Advise(IntPtr events, out uint cookie);
+                void Unadvise(uint cookie);
+                void SetOptions(FileOpenOptions options);
+                void GetOptions(out FileOpenOptions options);
+                void SetDefaultFolder(IShellItem shellItem);
+                void SetFolder(IShellItem shellItem);
+                void GetFolder(out IShellItem shellItem);
+                void GetCurrentSelection(out IShellItem shellItem);
+                void SetFileName([MarshalAs(UnmanagedType.LPWStr)] string fileName);
+                void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string fileName);
+                void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string title);
+                void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string text);
+                void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string label);
+                void GetResult(out IShellItem shellItem);
+                void AddPlace(IShellItem shellItem, int fileDialogAddPlace);
+                void SetDefaultExtension([MarshalAs(UnmanagedType.LPWStr)] string defaultExtension);
+                void Close(int hresult);
+                void SetClientGuid(ref Guid guid);
+                void ClearClientData();
+                void SetFilter(IntPtr filter);
+                void SetSaveAsItem(IShellItem shellItem);
+                void SetProperties(IntPtr propertyStore);
+                void SetCollectedProperties(IntPtr propertyDescriptionList, bool appendDefault);
+                void GetProperties(out IntPtr propertyStore);
+                void ApplyProperties(IShellItem shellItem, IntPtr propertyStore, IntPtr hwnd, IntPtr sink);
+            }
+
+            [ComImport]
+            [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
             [Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe")]
             private interface IShellItem
             {
@@ -257,6 +402,7 @@ namespace DingoJsonUI.GUI
                 NoChangeDirectory = 0x00000008,
                 PickFolders = 0x00000020,
                 ForceFileSystem = 0x00000040,
+                OverwritePrompt = 0x00000002,
             }
 
             private enum ShellItemDisplayName : uint
