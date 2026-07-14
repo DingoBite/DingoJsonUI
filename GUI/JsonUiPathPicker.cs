@@ -60,6 +60,22 @@ namespace DingoJsonUI.GUI
 #endif
         }
 
+        public static bool Confirm(string title, string message, string confirmLabel = "Continue")
+        {
+#if UNITY_EDITOR
+            return EditorUtility.DisplayDialog(
+                string.IsNullOrWhiteSpace(title) ? "Confirm" : title,
+                message ?? string.Empty,
+                string.IsNullOrWhiteSpace(confirmLabel) ? "Continue" : confirmLabel,
+                "Cancel");
+#elif UNITY_STANDALONE_WIN
+            return WindowsFileDialog.Confirm(title, message);
+#else
+            Debug.LogWarning("DingoJsonUI confirmation dialog is implemented for Unity Editor and Windows standalone builds.");
+            return false;
+#endif
+        }
+
         private static string NormalizeDirectory(string directory)
         {
             if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
@@ -90,6 +106,20 @@ namespace DingoJsonUI.GUI
         private static class WindowsFileDialog
         {
             private const int HResultCancelled = unchecked((int)0x800704C7);
+            private const uint MessageBoxOkCancel = 0x00000001;
+            private const uint MessageBoxIconWarning = 0x00000030;
+            private const uint MessageBoxDefaultButton2 = 0x00000100;
+            private const int MessageBoxOk = 1;
+
+            public static bool Confirm(string title, string message)
+            {
+                return MessageBox(
+                           IntPtr.Zero,
+                           message ?? string.Empty,
+                           string.IsNullOrWhiteSpace(title) ? "Confirm" : title,
+                           MessageBoxOkCancel | MessageBoxIconWarning | MessageBoxDefaultButton2)
+                       == MessageBoxOk;
+            }
 
             public static string OpenFile(string title, string directory, string extension)
             {
@@ -291,6 +321,9 @@ namespace DingoJsonUI.GUI
                 IntPtr bindContext,
                 ref Guid riid,
                 [MarshalAs(UnmanagedType.Interface)] out IShellItem shellItem);
+
+            [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "MessageBoxW")]
+            private static extern int MessageBox(IntPtr owner, string text, string caption, uint type);
 
             [ComImport]
             [Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")]
